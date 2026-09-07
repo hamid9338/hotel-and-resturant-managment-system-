@@ -1,0 +1,520 @@
+// Kashmir View Lodges HMS — Milestone 1 schema.
+// Models under "MILESTONE 2 (dormant)" have no API routes or UI yet — they exist now
+// so Milestone 2 can attach recipe/inventory/purchasing features without a painful migration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// AUTH / RBAC — data-driven so a future roles-and-permissions
+// admin UI is CRUD over these tables, not a code change.
+// ============================================================
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  username  String   @unique
+  pinHash   String
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  shift     String?  @default("Morning")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookingsCreated    Booking[]         @relation("BookingCreatedBy")
+  bookingsCheckedOut Booking[]         @relation("BookingCheckedOutBy")
+  ordersCreated      RestaurantOrder[] @relation("OrderCreatedBy")
+  paymentsReceived   Payment[]         @relation("PaymentReceivedBy")
+  ocrScans           OCRBill[]         @relation("OcrScannedBy")
+  ocrVerifications   OCRBill[]         @relation("OcrVerifiedBy")
+  auditLogs          AuditLog[]
+  alertsForMe        Alert[]           @relation("AlertForUser")
+  alertsResolved     Alert[]           @relation("AlertResolvedBy")
+  syncOperations     SyncOperation[]
+  loginAttempts      LoginAttempt[]
+
+  @@index([roleId])
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique // owner | manager | receptionist | waiter | housekeeper | kitchen_staff | cashier | inventory_manager
+  label       String
+  isSystem    Boolean          @default(true)
+  users       User[]
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  key         String           @unique // dot-notation, e.g. "hotel.create_booking"
+  module      String // hotel | restaurant | ocr | staff | reports | audit | sync | alerts | settings | inventory | finance
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  username  String
+  ipAddress String
+  success   Boolean
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([username, ipAddress, createdAt])
+}
+
+// ============================================================
+// HOTEL
+// ============================================================
+
+model RoomType {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  basePrice   Decimal  @db.Decimal(12, 2)
+  capacity    Int
+  amenities   Json     @default("[]")
+  description String?
+  rooms       Room[]
+  createdAt   DateTime @default(now())
+}
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  CLEANING
+  MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+model Room {
+  id         String     @id @default(uuid())
+  number     String     @unique
+  floor      Int
+  roomTypeId String
+  roomType   RoomType   @relation(fields: [roomTypeId], references: [id])
+  status     RoomStatus @default(AVAILABLE)
+  notes      String?
+  bookings   Booking[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([status])
+  @@index([roomTypeId])
+}
+
+model Guest {
+  id               String    @id @default(uuid())
+  name             String
+  cnic             String?   @unique
+  passportNo       String?
+  phone            String
+  email            String?
+  address          String?
+  city             String?
+  country          String?
+  emergencyContact String?
+  notes            String?
+  bookings         Booking[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([phone])
+}
+
+enum BookingStatus {
+  RESERVED // created, room untouched — this is what makes real future-dated reservations possible
+  CHECKED_IN // explicit action, sets Room.status = OCCUPIED
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+// Availability for a date range is a query against this table (half-open interval
+// overlap on [checkIn, checkOut)), NOT Room.status — see lib/services/availability.ts.
+// Also enforced at the DB layer by an EXCLUDE constraint added by hand to the
+// initial migration (Prisma has no DSL for EXCLUDE) — see prisma/migrations README.
+model Booking {
+  id             String        @id @default(uuid())
+  roomId         String
+  room           Room          @relation(fields: [roomId], references: [id])
+  guestId        String
+  guest          Guest         @relation(fields: [guestId], references: [id])
+  checkIn        DateTime      @db.Date
+  checkOut       DateTime      @db.Date
+  nights         Int
+  rate           Decimal       @db.Decimal(12, 2)
+  subtotal       Decimal       @db.Decimal(12, 2)
+  taxAmount      Decimal       @db.Decimal(12, 2)
+  discountAmount Decimal       @default(0) @db.Decimal(12, 2)
+  total          Decimal       @db.Decimal(12, 2)
+  advancePaid    Decimal       @default(0) @db.Decimal(12, 2)
+  balanceDue     Decimal       @db.Decimal(12, 2)
+  paymentStatus  PaymentStatus @default(PENDING)
+  status         BookingStatus @default(RESERVED)
+  notes          String?
+  createdById    String
+  createdBy      User          @relation("BookingCreatedBy", fields: [createdById], references: [id])
+  checkedOutById String?
+  checkedOutBy   User?         @relation("BookingCheckedOutBy", fields: [checkedOutById], references: [id])
+  checkedInAt    DateTime?
+  checkedOutAt   DateTime?
+
+  payments         Payment[]
+  restaurantOrders RestaurantOrder[] // room-service orders billed to this stay
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roomId, status])
+  @@index([guestId])
+  @@index([checkIn, checkOut])
+}
+
+enum PaymentMethod {
+  CASH
+  EASYPAISA
+  JAZZCASH
+  BANK
+  CARD
+}
+
+enum PaymentDirection {
+  IN
+  OUT // stub for Milestone 2 refunds
+}
+
+model Payment {
+  id           String           @id @default(uuid())
+  bookingId    String?
+  booking      Booking?         @relation(fields: [bookingId], references: [id])
+  orderId      String?
+  order        RestaurantOrder? @relation(fields: [orderId], references: [id])
+  amount       Decimal          @db.Decimal(12, 2)
+  method       PaymentMethod
+  direction    PaymentDirection @default(IN)
+  reference    String?
+  receivedById String
+  receivedBy   User             @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
+  createdAt    DateTime         @default(now())
+
+  @@index([bookingId])
+  @@index([orderId])
+}
+
+// ============================================================
+// RESTAURANT / POS
+// ============================================================
+
+model RestaurantTable {
+  id       String            @id @default(uuid())
+  label    String            @unique // "T1".."T6" — physical dine-in tables only; takeaway/room-service are OrderType, not fake tables
+  capacity Int?              @default(4)
+  status   String            @default("available")
+  orders   RestaurantOrder[]
+}
+
+model MenuCategory {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  sortOrder Int        @default(0)
+  items     MenuItem[]
+}
+
+model MenuItem {
+  id           String       @id @default(uuid())
+  name         String
+  categoryId   String
+  category     MenuCategory @relation(fields: [categoryId], references: [id])
+  price        Decimal      @db.Decimal(12, 2)
+  cost         Decimal?     @db.Decimal(12, 2) // dormant until Milestone 2 margin reporting
+  available    Boolean      @default(true)
+  imageUrl     String?
+  description  String?
+  prepTimeMins Int?
+  orderItems   OrderItem[]
+  recipeLines  RecipeItem[] // dormant until Milestone 2
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([categoryId])
+}
+
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  ROOM_SERVICE
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  READY
+  SERVED
+  BILLED
+  CANCELLED
+}
+
+model RestaurantOrder {
+  id             String           @id @default(uuid())
+  orderType      OrderType        @default(DINE_IN)
+  tableId        String?
+  table          RestaurantTable? @relation(fields: [tableId], references: [id])
+  bookingId      String? // set when orderType = ROOM_SERVICE and a stay is active
+  booking        Booking?         @relation(fields: [bookingId], references: [id])
+  status         OrderStatus      @default(PENDING)
+  subtotal       Decimal          @db.Decimal(12, 2)
+  taxAmount      Decimal          @db.Decimal(12, 2)
+  discountAmount Decimal          @default(0) @db.Decimal(12, 2)
+  total          Decimal          @db.Decimal(12, 2)
+  paymentStatus  PaymentStatus    @default(PENDING)
+  paymentMethod  PaymentMethod?
+  notes          String?
+  createdById    String
+  createdBy      User             @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  items          OrderItem[]
+  payments       Payment[]
+  createdAt      DateTime         @default(now())
+  billedAt       DateTime?
+
+  @@index([status])
+  @@index([tableId])
+  @@index([bookingId])
+}
+
+model OrderItem {
+  id            String          @id @default(uuid())
+  orderId       String
+  order         RestaurantOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId    String
+  menuItem      MenuItem        @relation(fields: [menuItemId], references: [id])
+  nameSnapshot  String
+  priceSnapshot Decimal         @db.Decimal(12, 2)
+  qty           Int
+  modifiers     Json? // dormant until Milestone 2
+  notes         String?
+  status        String? // dormant until Milestone 2 Kitchen Display System
+
+  @@index([orderId])
+  @@index([menuItemId])
+}
+
+// ============================================================
+// OCR BILL SCANNER
+// ============================================================
+
+enum BillType {
+  PURCHASE
+  SALES
+}
+
+model OCRBill {
+  id              String    @id @default(uuid())
+  billType        BillType
+  vendor          String?
+  billNo          String?
+  billDate        String?
+  rawText         String?
+  items           Json // [{ name, qty, unit, total }]
+  subtotal        Decimal   @db.Decimal(12, 2)
+  discount        Decimal   @default(0) @db.Decimal(12, 2)
+  tax             Decimal   @default(0) @db.Decimal(12, 2)
+  total           Decimal   @db.Decimal(12, 2)
+  confidence      Float
+  imagePath       String? // Vercel Blob URL, not a local filesystem path
+  scannedById     String
+  scannedBy       User      @relation("OcrScannedBy", fields: [scannedById], references: [id])
+  verified        Boolean   @default(false)
+  verifiedById    String?
+  verifiedBy      User?     @relation("OcrVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedAt      DateTime?
+  inventoryPosted Boolean   @default(false) // dormant until Milestone 2
+  scannedAt       DateTime  @default(now())
+
+  @@index([billType])
+}
+
+// ============================================================
+// AUDIT / ALERTS
+// ============================================================
+
+enum RiskLevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model AuditLog {
+  id         String    @id @default(uuid())
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id])
+  userName   String // snapshotted — survives user deletion
+  userRole   String // snapshotted
+  action     String
+  module     String
+  entityType String?
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  riskLevel  RiskLevel @default(NONE)
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([module])
+  @@index([riskLevel])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Alert {
+  id           String    @id @default(uuid())
+  type         String
+  message      String
+  detail       String?
+  severity     RiskLevel @default(MEDIUM)
+  userId       String?
+  user         User?     @relation("AlertForUser", fields: [userId], references: [id])
+  resolved     Boolean   @default(false)
+  resolvedById String?
+  resolvedBy   User?     @relation("AlertResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([resolved])
+}
+
+// ============================================================
+// SETTINGS — singleton row
+// ============================================================
+
+model SystemSetting {
+  id               Int      @id @default(1)
+  businessName     String   @default("Kashmir View Lodges Hotel & Management System")
+  currency         String   @default("PKR")
+  timezone         String   @default("Asia/Karachi")
+  taxRatePct       Decimal  @default(5) @db.Decimal(5, 2)
+  serviceChargePct Decimal  @default(0) @db.Decimal(5, 2)
+  invoicePrefix    String   @default("KVL")
+  invoiceNextSeq   Int      @default(1)
+  logoUrl          String?
+  updatedAt        DateTime @updatedAt
+}
+
+// ============================================================
+// OFFLINE SYNC — real implementation (the old sync_queue was decorative)
+// ============================================================
+
+enum SyncStatus {
+  PENDING
+  APPLIED
+  CONFLICT
+  FAILED
+}
+
+model SyncOperation {
+  id              String     @id // client-generated UUID = idempotency key, not auto-assigned
+  deviceId        String
+  userId          String
+  user            User       @relation(fields: [userId], references: [id])
+  operationKind   String // whitelisted: "bookings.create" | "bookings.checkin" | "bookings.checkout" | "orders.create" | "orders.updateStatus" | "rooms.updateStatus"
+  entityId        String?
+  payload         Json
+  clientTimestamp DateTime
+  status          SyncStatus @default(PENDING)
+  conflictReason  String?
+  serverAppliedAt DateTime?
+  createdAt       DateTime   @default(now())
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ============================================================
+// MILESTONE 2 (dormant) — schema only, no API routes or nav entries.
+// Defined now so recipe-based inventory deduction and purchasing can
+// attach later without restructuring MenuItem/OrderItem.
+// ============================================================
+
+model InventoryItem {
+  id             String       @id @default(uuid())
+  sku            String       @unique
+  name           String
+  category       String?
+  unit           String
+  quantityOnHand Decimal      @default(0) @db.Decimal(12, 3)
+  reorderLevel   Decimal      @default(0) @db.Decimal(12, 3)
+  costPerUnit    Decimal?     @db.Decimal(12, 2)
+  supplierId     String?
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id])
+  recipeLines    RecipeItem[]
+  createdAt      DateTime     @default(now())
+}
+
+model Supplier {
+  id             String          @id @default(uuid())
+  name           String
+  company        String?
+  phone          String?
+  email          String?
+  address        String?
+  taxInfo        String?
+  items          InventoryItem[]
+  purchaseOrders PurchaseOrder[]
+  createdAt      DateTime        @default(now())
+}
+
+model PurchaseOrder {
+  id         String   @id @default(uuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  status     String   @default("draft") // draft|ordered|received|verified|paid
+  total      Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt  DateTime @default(now())
+}
+
+model Expense {
+  id         String         @id @default(uuid())
+  category   String
+  amount     Decimal        @db.Decimal(12, 2)
+  method     PaymentMethod?
+  status     String         @default("pending") // pending|approved|rejected
+  notes      String?
+  receiptUrl String?
+  createdAt  DateTime       @default(now())
+}
+
+model RecipeItem {
+  id              String        @id @default(uuid())
+  menuItemId      String
+  menuItem        MenuItem      @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  quantityUsed    Decimal       @db.Decimal(12, 3)
+
+  @@unique([menuItemId, inventoryItemId])
+}

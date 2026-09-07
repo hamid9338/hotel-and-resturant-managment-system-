@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+:root {
+  /* Light theme (default) */
+  --background: #faf9f7;
+  --surface-1: #ffffff;
+  --surface-2: #f5f3ef;
+  --surface-3: #ece9e2;
+  --border-subtle: rgba(20, 15, 5, 0.08);
+  --border-default: rgba(20, 15, 5, 0.12);
+  --border-strong: rgba(20, 15, 5, 0.22);
+  --foreground: #1a1712;
+  --muted: #6b6558;
+  --muted-2: #9a927f;
+  --accent: #a97a1f;
+  --accent-soft: rgba(169, 122, 31, 0.1);
+  --accent-border: rgba(169, 122, 31, 0.3);
+  --success: #2f8f5b;
+  --success-soft: rgba(47, 143, 91, 0.1);
+  --danger: #c73e3e;
+  --danger-soft: rgba(199, 62, 62, 0.1);
+  --warning: #b5790f;
+  --warning-soft: rgba(181, 121, 15, 0.12);
+  --info: #3568b0;
+  --info-soft: rgba(53, 104, 176, 0.1);
+  --cyan: #1c8a7e;
+  --cyan-soft: rgba(28, 138, 126, 0.1);
+}
+
+:root[data-theme="dark"] {
+  --background: #0d0f12;
+  --surface-1: #14171f;
+  --surface-2: #1a1f27;
+  --surface-3: #20262f;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --foreground: #e9e6df;
+  --muted: #8b93a0;
+  --muted-2: #566072;
+  --accent: #c8973a;
+  --accent-soft: rgba(200, 151, 58, 0.14);
+  --accent-border: rgba(200, 151, 58, 0.34);
+  --success: #3aaa6e;
+  --success-soft: rgba(58, 170, 110, 0.14);
+  --danger: #e05252;
+  --danger-soft: rgba(224, 82, 82, 0.14);
+  --warning: #e0a030;
+  --warning-soft: rgba(224, 160, 48, 0.14);
+  --info: #4a8fe0;
+  --info-soft: rgba(74, 143, 224, 0.14);
+  --cyan: #2dcfc0;
+  --cyan-soft: rgba(45, 207, 192, 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #0d0f12;
+    --surface-1: #14171f;
+    --surface-2: #1a1f27;
+    --surface-3: #20262f;
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-default: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.18);
+    --foreground: #e9e6df;
+    --muted: #8b93a0;
+    --muted-2: #566072;
+    --accent: #c8973a;
+    --accent-soft: rgba(200, 151, 58, 0.14);
+    --accent-border: rgba(200, 151, 58, 0.34);
+    --success: #3aaa6e;
+    --success-soft: rgba(58, 170, 110, 0.14);
+    --danger: #e05252;
+    --danger-soft: rgba(224, 82, 82, 0.14);
+    --warning: #e0a030;
+    --warning-soft: rgba(224, 160, 48, 0.14);
+    --info: #4a8fe0;
+    --info-soft: rgba(74, 143, 224, 0.14);
+    --cyan: #2dcfc0;
+    --cyan-soft: rgba(45, 207, 192, 0.14);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-2: var(--muted-2);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-border: var(--accent-border);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-cyan: var(--cyan);
+  --color-cyan-soft: var(--cyan-soft);
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-dm-sans);
+  --font-mono: var(--font-dm-mono);
+}
+
+* {
+  border-color: var(--border-default);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 9999px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.animate-fade-in {
+  animation: fadeIn 0.15s ease-out;
+}
+.animate-slide-up {
+  animation: slideUp 0.18s ease-out;
+}
+.animate-pulse-dot {
+  animation: pulseDot 2s ease-in-out infinite;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
