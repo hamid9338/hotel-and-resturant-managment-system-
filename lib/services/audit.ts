@@ -54,3 +54,39 @@ export async function recordAlert(input: {
     },
   });
 }
+
+/**
+ * Generalizes the find-unresolved/create-or-resolve dance
+ * lib/services/inventory.ts::syncLowStockAlert already does inline for
+ * low-stock alerts — additive, that working function is left untouched.
+ * Any condition that can be continuously true/false (an anomaly threshold,
+ * a stock level) calls this instead of recordAlert directly, so a
+ * persisting condition doesn't spam duplicate alerts and clears itself
+ * automatically once the condition normalizes.
+ */
+export async function syncDedupedAlert(input: {
+  type: string;
+  entityId: string;
+  isActive: boolean;
+  message: string;
+  detail?: string;
+  severity?: RiskLevel;
+}) {
+  const existing = await prisma.alert.findFirst({
+    where: { type: input.type, entityId: input.entityId, resolved: false },
+  });
+
+  if (input.isActive && !existing) {
+    await prisma.alert.create({
+      data: {
+        type: input.type,
+        entityId: input.entityId,
+        message: input.message,
+        detail: input.detail,
+        severity: input.severity ?? "MEDIUM",
+      },
+    });
+  } else if (!input.isActive && existing) {
+    await prisma.alert.update({ where: { id: existing.id }, data: { resolved: true, resolvedAt: new Date() } });
+  }
+}

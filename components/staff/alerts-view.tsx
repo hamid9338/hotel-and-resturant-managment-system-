@@ -38,6 +38,7 @@ export function AlertsView() {
       .get<AlertRow[]>("/api/alerts")
       .then(setAlerts)
       .catch(() => setAlerts([]));
+    api.post("/api/alerts/mark-viewed").catch(() => {});
   }, []);
   useEffect(() => {
     load();

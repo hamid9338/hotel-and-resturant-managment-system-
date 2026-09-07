@@ -54,4 +54,11 @@ describe("RBAC matrix consistency", () => {
       expect(role.permissions, `${role.name} should not have "staff.edit"`).not.toContain("staff.edit");
     }
   });
+
+  it("only the owner can manage role permissions — stricter than any other sensitive key, since it controls the access-control system itself", () => {
+    for (const role of ROLES) {
+      if (role.name === "owner") continue;
+      expect(role.permissions, `${role.name} should not have "staff.manage_roles"`).not.toContain("staff.manage_roles");
+    }
+  });
 });

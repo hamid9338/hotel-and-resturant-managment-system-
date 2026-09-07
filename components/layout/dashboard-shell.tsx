@@ -12,18 +12,23 @@ import { SessionProvider } from "@/components/session-provider";
 import { SyncManager } from "@/components/offline/sync-manager";
 import { clearOutboxForUser } from "@/lib/offline/outbox";
 import { api } from "@/lib/api-client";
+import { AlertsBell } from "@/components/layout/alerts-bell";
+import { GlobalSearch } from "@/components/layout/global-search";
 
 type ShellUser = { id: string; name: string; role: string; shift: string | null };
+type AlertSummary = { count: number; recent: { id: string; message: string; severity: string; createdAt: string }[] };
 
 export function DashboardShell({
   user,
   permissions,
   businessName,
+  initialAlertSummary,
   children,
 }: {
   user: ShellUser;
   permissions: string[];
   businessName: string;
+  initialAlertSummary: AlertSummary;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -130,7 +135,11 @@ export function DashboardShell({
             <Menu size={20} />
           </button>
           <div className="hidden font-mono text-xs text-muted md:block">{businessName}</div>
-          <ThemeToggle />
+          <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
+            <GlobalSearch />
+            {permissions.includes("alerts.view") && <AlertsBell initial={initialAlertSummary} />}
+            <ThemeToggle />
+          </div>
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
           <SessionProvider userId={user.id}>

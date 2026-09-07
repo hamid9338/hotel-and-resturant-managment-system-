@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Receipt } from "lucide-react";
+import { Receipt, Download } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,11 +75,18 @@ export function ExpensesList({ currency }: { currency: string }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-semibold">Expenses</h1>
-        {has("finance.log_expense") && (
-          <Button variant="primary" onClick={() => setCreating(true)}>
-            + Expense
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <a href="/api/expenses?format=csv">
+            <Button size="sm" variant="secondary">
+              <Download size={13} /> Export CSV
+            </Button>
+          </a>
+          {has("finance.log_expense") && (
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              + Expense
+            </Button>
+          )}
+        </div>
       </div>
 
       {expenses.length === 0 ? (

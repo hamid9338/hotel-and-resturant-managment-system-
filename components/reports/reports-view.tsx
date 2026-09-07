@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Percent, TrendingUp } from "lucide-react";
+import { Percent, TrendingUp, Download, Printer } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
+import { Button } from "@/components/ui/button";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/format";
+import { AiSummaryPanel } from "@/components/reports/ai-summary-panel";
 
 type Summary = {
   totalRevenue: number;
@@ -40,10 +42,26 @@ export function ReportsView({ currency }: { currency: string }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Reports</h1>
-        <p className="text-sm text-muted">Last 30 days.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-semibold">Reports</h1>
+          <p className="text-sm text-muted">Last 30 days.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href="/api/reports/daily?days=30&format=csv">
+            <Button size="sm" variant="secondary">
+              <Download size={13} /> Export CSV
+            </Button>
+          </a>
+          <a href="/print/report?period=30d" target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="secondary">
+              <Printer size={13} /> Print Report
+            </Button>
+          </a>
+        </div>
       </div>
+
+      <AiSummaryPanel period="30d" currency={currency} />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard label="Occupancy Rate" value={`${occupancyRate}%`} icon={Percent} tone="info" />

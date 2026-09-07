@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CalendarRange, Search } from "lucide-react";
+import { CalendarRange, Search, Download } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,14 +62,21 @@ export function BookingsTable({ currency }: { currency: string }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold">Reservations</h1>
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-2" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search guest or room"
-            className="w-48 pl-8"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-2" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search guest or room"
+              className="w-48 pl-8"
+            />
+          </div>
+          <a href={`/api/bookings?format=csv${status !== "ALL" ? `&status=${status}` : ""}`}>
+            <Button size="sm" variant="secondary">
+              <Download size={13} /> Export CSV
+            </Button>
+          </a>
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">

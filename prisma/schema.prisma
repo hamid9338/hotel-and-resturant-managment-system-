@@ -25,6 +25,7 @@ model User {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  lastAlertsViewedAt DateTime? // last time this user opened the notification bell/alerts page
 
   bookingsCreated    Booking[]         @relation("BookingCreatedBy")
   bookingsCheckedOut Booking[]         @relation("BookingCheckedOutBy")
@@ -433,6 +434,7 @@ model Alert {
   createdAt    DateTime  @default(now())
 
   @@index([resolved])
+  @@index([resolved, createdAt]) // bell polling adds a hot, frequent access pattern on top of the staff/alerts page
 }
 
 // ============================================================
@@ -449,6 +451,8 @@ model SystemSetting {
   invoicePrefix    String   @default("KVL")
   invoiceNextSeq   Int      @default(1)
   logoUrl          String?
+  lastAnomalyCheckAt DateTime? // throttles lib/services/anomalies.ts — internal only, not in the Settings form
+  lastAiNarrativeAt  DateTime? // separate cooldown for the AI report narrative — distinct window, distinct field
   updatedAt        DateTime @updatedAt
 }
 

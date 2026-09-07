@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Download } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -98,19 +98,26 @@ export function OrdersBoard({ currency }: { currency: string }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold">Orders</h1>
-        <div className="flex gap-1 rounded-lg border border-border-default bg-surface-2 p-1">
-          <button
-            onClick={() => setFilter("active")}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium ${filter === "active" ? "bg-surface-1 text-accent shadow-sm" : "text-muted"}`}
-          >
-            Active
-          </button>
-          <button
-            onClick={() => setFilter("all")}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium ${filter === "all" ? "bg-surface-1 text-accent shadow-sm" : "text-muted"}`}
-          >
-            All (last 100)
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <a href="/api/orders?format=csv">
+            <Button size="sm" variant="secondary">
+              <Download size={13} /> Export CSV
+            </Button>
+          </a>
+          <div className="flex gap-1 rounded-lg border border-border-default bg-surface-2 p-1">
+            <button
+              onClick={() => setFilter("active")}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium ${filter === "active" ? "bg-surface-1 text-accent shadow-sm" : "text-muted"}`}
+            >
+              Active
+            </button>
+            <button
+              onClick={() => setFilter("all")}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium ${filter === "all" ? "bg-surface-1 text-accent shadow-sm" : "text-muted"}`}
+            >
+              All (last 100)
+            </button>
+          </div>
         </div>
       </div>
 

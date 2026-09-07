@@ -88,7 +88,15 @@ const MENU: { name: string; category: string; price: number; available?: boolean
   { name: "Kulfi Falooda", category: "Desserts", price: 220, description: "Traditional kulfi with falooda" },
 ];
 
-async function seedPermissionsAndRoles() {
+// Exported (not just called from main() below) so
+// tests/seed-rbac-idempotency.test.ts can exercise the real bootstrap logic
+// directly rather than re-implementing it.
+export async function seedPermissionsAndRoles() {
+  // Snapshotted before the upsert loop below creates anything — used to tell
+  // "a key that already existed" apart from "a key brand-new this run" once
+  // we get to the per-role backfill further down.
+  const preExistingKeys = new Set((await prisma.permission.findMany({ select: { key: true } })).map((p) => p.key));
+
   const permissionByKey = new Map<string, string>();
   for (const p of PERMISSIONS) {
     const row = await prisma.permission.upsert({
@@ -105,10 +113,31 @@ async function seedPermissionsAndRoles() {
       update: { label: r.label },
       create: { name: r.name, label: r.label },
     });
-    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
-    await prisma.rolePermission.createMany({
-      data: r.permissions.map((key) => ({ roleId: role.id, permissionId: permissionByKey.get(key)! })),
-    });
+
+    const existingCount = await prisma.rolePermission.count({ where: { roleId: role.id } });
+    if (existingCount === 0) {
+      // True first-time bootstrap for this role — seed its full default set.
+      await prisma.rolePermission.createMany({
+        data: r.permissions.map((key) => ({ roleId: role.id, permissionId: permissionByKey.get(key)! })),
+      });
+      continue;
+    }
+
+    // This role already has rows — either from a previous seed run or from
+    // deliberate edits made through the roles-admin UI (Milestone 3). Never
+    // delete-and-recreate here: that would silently revert an admin's
+    // customization on every routine reseed. Only backfill keys that are
+    // genuinely new to the system as of this run (a later milestone adding a
+    // permission this role's default list already includes) — a key that
+    // existed before is left exactly as the admin has it, whether that means
+    // present or deliberately removed.
+    const newKeysForThisRole = r.permissions.filter((key) => !preExistingKeys.has(key));
+    if (newKeysForThisRole.length > 0) {
+      await prisma.rolePermission.createMany({
+        data: newKeysForThisRole.map((key) => ({ roleId: role.id, permissionId: permissionByKey.get(key)! })),
+        skipDuplicates: true,
+      });
+    }
   }
   console.log(`Seeded ${PERMISSIONS.length} permissions across ${ROLES.length} roles.`);
 }

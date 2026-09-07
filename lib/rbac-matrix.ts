@@ -37,6 +37,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { key: "staff.view_all", module: "staff", description: "View all staff" },
   { key: "staff.create", module: "staff", description: "Create a staff account" },
   { key: "staff.edit", module: "staff", description: "Edit a staff account" },
+  { key: "staff.manage_roles", module: "staff", description: "Edit which permissions each role has" },
   { key: "reports.view", module: "reports", description: "View reports and dashboard" },
   { key: "audit.view", module: "audit", description: "View the audit log" },
   { key: "alerts.view", module: "alerts", description: "View security alerts" },
