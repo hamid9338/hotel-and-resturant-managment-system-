@@ -14,13 +14,17 @@ import {
   Settings,
   RefreshCw,
   BarChart3,
+  Package,
+  Truck,
+  ClipboardCheck,
+  Receipt,
+  Landmark,
+  ChefHat,
+  Wrench,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon; permission?: string[]; section: string };
 
-// Sections/pages here are exactly what Milestone 1 actually implements —
-// Inventory/Purchasing/Finance/KDS etc. are Milestone 2 and deliberately
-// don't appear here yet rather than linking to something that isn't built.
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, section: "" },
   { href: "/hotel", label: "Rooms", icon: BedDouble, section: "Hotel", permission: ["hotel.view", "hotel.view_cleaning"] },
@@ -33,6 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
     section: "Hotel",
     permission: ["hotel.view", "hotel.view_cleaning"],
   },
+  { href: "/maintenance", label: "Maintenance", icon: Wrench, section: "Hotel", permission: ["hotel.manage_maintenance"] },
   {
     href: "/restaurant",
     label: "POS",
@@ -41,7 +46,31 @@ export const NAV_ITEMS: NavItem[] = [
     permission: ["restaurant.create_order", "restaurant.view"],
   },
   { href: "/restaurant/orders", label: "Orders", icon: ClipboardList, section: "Restaurant", permission: ["restaurant.view"] },
+  {
+    href: "/kitchen",
+    label: "Kitchen Display",
+    icon: ChefHat,
+    section: "Restaurant",
+    permission: ["restaurant.update_order_status"],
+  },
   { href: "/ocr", label: "Bill Scanner", icon: ScanLine, section: "AI", permission: ["ocr.view", "ocr.scan"] },
+  { href: "/inventory", label: "Inventory", icon: Package, section: "Inventory", permission: ["inventory.view"] },
+  { href: "/inventory/suppliers", label: "Suppliers", icon: Truck, section: "Inventory", permission: ["inventory.view"] },
+  {
+    href: "/inventory/purchase-orders",
+    label: "Purchase Orders",
+    icon: ClipboardCheck,
+    section: "Inventory",
+    permission: ["inventory.view"],
+  },
+  { href: "/finance/expenses", label: "Expenses", icon: Receipt, section: "Finance", permission: ["finance.view"] },
+  {
+    href: "/finance/cash-register",
+    label: "Cash Register",
+    icon: Landmark,
+    section: "Finance",
+    permission: ["finance.manage_cash_shift"],
+  },
   { href: "/reports", label: "Reports", icon: BarChart3, section: "Reports", permission: ["reports.view"] },
   { href: "/staff", label: "Staff", icon: UserCog, section: "Admin", permission: ["staff.view_all"] },
   { href: "/staff/audit", label: "Audit Log", icon: ShieldAlert, section: "Admin", permission: ["audit.view"] },

@@ -28,11 +28,29 @@ export const updateOrderStatusSchema = z.object({
   status: z.enum(["PENDING", "PREPARING", "READY", "SERVED", "BILLED", "CANCELLED"]),
 });
 
+export const billPaymentEntrySchema = z.object({
+  method: paymentMethodEnum,
+  amount: z.number().positive(),
+});
+
+// Split-by-payment-method billing: one settle action can pay part cash, part
+// card, etc. The "sums to order.total exactly" check happens in the service
+// layer, not here — Zod has no access to the order's actual total.
 export const billOrderSchema = z.object({
-  paymentMethod: paymentMethodEnum.default("CASH"),
+  payments: z.array(billPaymentEntrySchema).min(1).max(4),
 });
 
 export const updateMenuItemSchema = z.object({
   price: z.number().min(0).optional(),
   available: z.boolean().optional(),
+});
+
+export const updateKitchenItemStatusSchema = z.object({
+  status: z.enum(["QUEUED", "COOKING", "READY", "SERVED"]),
+});
+
+export const refundOrderSchema = z.object({
+  amount: z.number().positive(),
+  method: paymentMethodEnum,
+  reason: z.string().trim().min(3, { error: "A reason is required for a refund." }),
 });

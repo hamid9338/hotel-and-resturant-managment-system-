@@ -10,6 +10,8 @@ import { SkeletonRows } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { usePermissions } from "@/components/permissions-provider";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { BillOrderModal } from "@/components/restaurant/bill-order-modal";
+import { RefundModal } from "@/components/shared/refund-modal";
 
 type OrderItemRow = { id: string; nameSnapshot: string; qty: number };
 type Order = {
@@ -22,6 +24,8 @@ type Order = {
   items: OrderItemRow[];
   createdBy: { name: string };
 };
+
+type ModalState = { type: "bill"; order: Order } | { type: "refund"; order: Order } | null;
 
 const NEXT_STATUS: Record<string, string | null> = {
   PENDING: "PREPARING",
@@ -45,6 +49,7 @@ export function OrdersBoard({ currency }: { currency: string }) {
   const { has } = usePermissions();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [filter, setFilter] = useState("active");
+  const [modal, setModal] = useState<ModalState>(null);
 
   const load = useCallback(() => {
     api
@@ -80,14 +85,9 @@ export function OrdersBoard({ currency }: { currency: string }) {
     }
   };
 
-  const bill = async (order: Order) => {
-    try {
-      await api.post(`/api/orders/${order.id}/bill`, { paymentMethod: "CASH" });
-      toast.success("Order billed");
-      load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not bill order.");
-    }
+  const refreshAndClose = () => {
+    load();
+    setModal(null);
   };
 
   if (orders === null) return <SkeletonRows rows={6} />;
@@ -144,7 +144,7 @@ export function OrdersBoard({ currency }: { currency: string }) {
                   </Button>
                 )}
                 {has("restaurant.bill_order") && !["BILLED", "CANCELLED"].includes(order.status) && (
-                  <Button size="sm" variant="primary" onClick={() => bill(order)}>
+                  <Button size="sm" variant="primary" onClick={() => setModal({ type: "bill", order })}>
                     Bill
                   </Button>
                 )}
@@ -153,10 +153,38 @@ export function OrdersBoard({ currency }: { currency: string }) {
                     Cancel
                   </Button>
                 )}
+                {order.status === "BILLED" && (
+                  <a
+                    href={`/print/order/${order.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center rounded-lg border border-border-default px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground"
+                  >
+                    Print
+                  </a>
+                )}
+                {has("finance.refund") && order.status === "BILLED" && (
+                  <Button size="sm" variant="ghost" onClick={() => setModal({ type: "refund", order })}>
+                    Refund
+                  </Button>
+                )}
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {modal?.type === "bill" && (
+        <BillOrderModal
+          orderId={modal.order.id}
+          total={Number(modal.order.total)}
+          currency={currency}
+          onClose={() => setModal(null)}
+          onDone={refreshAndClose}
+        />
+      )}
+      {modal?.type === "refund" && (
+        <RefundModal entityType="order" entityId={modal.order.id} onClose={() => setModal(null)} onDone={refreshAndClose} />
       )}
     </div>
   );

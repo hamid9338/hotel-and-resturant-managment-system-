@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { CalendarRange, Search } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/field";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { usePermissions } from "@/components/permissions-provider";
+import { RefundModal } from "@/components/shared/refund-modal";
 
 type BookingRow = {
   id: string;
@@ -33,17 +36,23 @@ const STATUS_TONE: Record<string, "success" | "accent" | "neutral" | "danger" | 
 const STATUS_FILTERS = ["ALL", "RESERVED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED"];
 
 export function BookingsTable({ currency }: { currency: string }) {
+  const { has } = usePermissions();
   const [bookings, setBookings] = useState<BookingRow[] | null>(null);
   const [status, setStatus] = useState("ALL");
   const [search, setSearch] = useState("");
+  const [refundingId, setRefundingId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     const qs = status !== "ALL" ? `?status=${status}` : "";
     api
       .get<BookingRow[]>(`/api/bookings${qs}`)
       .then(setBookings)
       .catch(() => setBookings([]));
   }, [status]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const filtered = (bookings ?? []).filter(
     (b) => b.guest.name.toLowerCase().includes(search.toLowerCase()) || b.room.number.includes(search)
@@ -95,6 +104,7 @@ export function BookingsTable({ currency }: { currency: string }) {
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Total</th>
                   <th className="px-4 py-3 text-right">Balance</th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
@@ -114,12 +124,43 @@ export function BookingsTable({ currency }: { currency: string }) {
                     <td className="px-4 py-3 text-right font-mono text-danger">
                       {Number(b.balanceDue) > 0 ? formatCurrency(Number(b.balanceDue), currency) : "—"}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      {b.status === "CHECKED_OUT" && (
+                        <div className="flex justify-end gap-2">
+                          <a
+                            href={`/print/booking/${b.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground"
+                          >
+                            Print
+                          </a>
+                          {has("finance.refund") && (
+                            <Button size="sm" variant="ghost" onClick={() => setRefundingId(b.id)}>
+                              Refund
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </Card>
+      )}
+
+      {refundingId && (
+        <RefundModal
+          entityType="booking"
+          entityId={refundingId}
+          onClose={() => setRefundingId(null)}
+          onDone={() => {
+            setRefundingId(null);
+            load();
+          }}
+        />
       )}
     </div>
   );

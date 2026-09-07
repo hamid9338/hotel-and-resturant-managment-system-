@@ -103,7 +103,7 @@ export function DashboardContent({ currency }: { currency: string }) {
               value={formatCurrency(summary.estimatedProfit, currency)}
               icon={TrendingUp}
               tone="success"
-              hint="Revenue minus logged purchase bills"
+              hint="Revenue minus purchases & approved expenses"
             />
             <StatCard label="Pending Check-ins" value={String(summary.pendingCheckins)} icon={LogIn} tone="warning" />
             <StatCard label="Pending Check-outs" value={String(summary.pendingCheckouts)} icon={LogOut} tone="warning" />

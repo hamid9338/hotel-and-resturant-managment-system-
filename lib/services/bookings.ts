@@ -7,11 +7,12 @@ import { getSettings } from "@/lib/services/settings";
 import { recordAudit, recordAlert } from "@/lib/services/audit";
 import { round2, toNumber } from "@/lib/money";
 import type { SessionUser } from "@/lib/auth/session";
-import type { createBookingSchema, checkoutSchema, discountSchema } from "@/lib/validation/hotel";
+import type { createBookingSchema, checkoutSchema, discountSchema, refundBookingSchema } from "@/lib/validation/hotel";
 
 type CreateBookingInput = z.infer<typeof createBookingSchema>;
 type CheckoutInput = z.infer<typeof checkoutSchema>;
 type DiscountInput = z.infer<typeof discountSchema>;
+type RefundBookingInput = z.infer<typeof refundBookingSchema>;
 
 const bookingInclude = {
   guest: true,
@@ -82,7 +83,7 @@ export async function createBooking(
           },
         });
 
-    return tx.booking.create({
+    const created = await tx.booking.create({
       data: {
         // When set (offline-sync path), keeps the ID the client already
         // assigned when it created this record while disconnected, so the
@@ -106,6 +107,22 @@ export async function createBooking(
       },
       include: bookingInclude,
     });
+
+    // Every real cash movement needs a Payment row, not just the denormalized
+    // Booking.advancePaid field — otherwise a cash-shift reconciliation (which
+    // sums Payment rows) silently misses advances collected during the shift.
+    if (advancePaid > 0) {
+      await tx.payment.create({
+        data: {
+          bookingId: created.id,
+          amount: advancePaid,
+          method: input.paymentMethod,
+          receivedById: session.id,
+        },
+      });
+    }
+
+    return created;
   });
 
   await recordAudit({
@@ -154,13 +171,23 @@ export async function checkOutBooking(session: SessionUser, bookingId: string, i
     throw new AppError("INVALID_BOOKING_STATE", "Only a checked-in booking can be checked out.", 409);
   }
 
-  const finalPayment = round2(input.finalPayment ?? 0);
+  // Split-by-payment-method final settlement — unlike order billing, this sum
+  // is deliberately unconstrained (can be less than balanceDue, or zero): a
+  // guest can still leave owing a balance to settle later, same as the old
+  // single finalPayment field's semantics.
+  const finalPayment = round2(input.payments.reduce((sum, p) => sum + p.amount, 0));
   const newAdvance = round2(toNumber(booking.advancePaid) + finalPayment);
   const total = toNumber(booking.total);
   const newBalance = round2(Math.max(0, total - newAdvance));
 
-  const [updated] = await prisma.$transaction([
-    prisma.booking.update({
+  const updated = await prisma.$transaction(async (tx) => {
+    const settingsAfter = await tx.systemSetting.update({
+      where: { id: 1 },
+      data: { invoiceNextSeq: { increment: 1 } },
+    });
+    const invoiceNo = `${settingsAfter.invoicePrefix}-${settingsAfter.invoiceNextSeq - 1}`;
+
+    const result = await tx.booking.update({
       where: { id: bookingId },
       data: {
         status: "CHECKED_OUT",
@@ -169,23 +196,25 @@ export async function checkOutBooking(session: SessionUser, bookingId: string, i
         paymentStatus: paymentStatusFor(total, newAdvance),
         checkedOutAt: new Date(),
         checkedOutById: session.id,
+        invoiceNo,
       },
       include: bookingInclude,
-    }),
-    // Business rule: a checked-out room needs housekeeping before it can be booked again.
-    prisma.room.update({ where: { id: booking.roomId }, data: { status: "CLEANING" } }),
-  ]);
-
-  if (finalPayment > 0) {
-    await prisma.payment.create({
-      data: {
-        bookingId,
-        amount: finalPayment,
-        method: input.paymentMethod,
-        receivedById: session.id,
-      },
     });
-  }
+
+    // Business rule: a checked-out room needs housekeeping before it can be booked again.
+    await tx.room.update({ where: { id: booking.roomId }, data: { status: "CLEANING" } });
+
+    for (const p of input.payments) {
+      await tx.payment.create({
+        data: { bookingId, amount: p.amount, method: p.method, receivedById: session.id },
+      });
+    }
+
+    return result;
+    // See the matching comment in lib/services/orders.ts::billOrder — a
+    // variable-length payments[] loop can outrun the 5s default under a
+    // cold-starting serverless connection.
+  }, { timeout: 15_000 });
 
   await recordAudit({
     session,
@@ -193,7 +222,10 @@ export async function checkOutBooking(session: SessionUser, bookingId: string, i
     module: "Hotel",
     entityType: "Booking",
     entityId: booking.id,
-    details: `Payment: ${input.paymentMethod}, balance due: ${newBalance}`,
+    details:
+      input.payments.length > 0
+        ? `Payment: ${input.payments.map((p) => `${p.method} ${p.amount}`).join(", ")}, balance due: ${newBalance}`
+        : `No payment collected, balance due: ${newBalance}`,
   });
 
   return updated;
@@ -279,4 +311,56 @@ export async function applyBookingDiscount(session: SessionUser, bookingId: stri
   }
 
   return updated;
+}
+
+/**
+ * Refunds are rarer/more anomalous than a routine discount, so unlike the
+ * discount tiering above, a refund is always HIGH-risk audit + always an
+ * alert. Payment.reference (unused elsewhere in M1) holds the required
+ * reason text.
+ */
+export async function refundBookingPayment(session: SessionUser, bookingId: string, input: RefundBookingInput) {
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId }, include: bookingInclude });
+  if (!booking) throw new AppError("BOOKING_NOT_FOUND", "Reservation not found.", 404);
+
+  const [{ _sum: paidAgg }, { _sum: refundedAgg }] = await Promise.all([
+    prisma.payment.aggregate({ where: { bookingId, direction: "IN" }, _sum: { amount: true } }),
+    prisma.payment.aggregate({ where: { bookingId, direction: "OUT" }, _sum: { amount: true } }),
+  ]);
+  const netCollected = round2(toNumber(paidAgg.amount) - toNumber(refundedAgg.amount));
+  if (input.amount > netCollected) {
+    throw new AppError("REFUND_EXCEEDS_COLLECTED", `Cannot refund more than the ${netCollected} collected so far.`, 422);
+  }
+
+  const payment = await prisma.payment.create({
+    data: {
+      bookingId,
+      amount: input.amount,
+      method: input.method,
+      direction: "OUT",
+      reference: input.reason,
+      receivedById: session.id,
+    },
+  });
+
+  await recordAudit({
+    session,
+    action: `Refund issued: ${booking.guest.name} — Room ${booking.room.number} — ${input.amount}`,
+    module: "Hotel",
+    entityType: "Booking",
+    entityId: booking.id,
+    riskLevel: "HIGH",
+    details: input.reason,
+  });
+
+  await recordAlert({
+    type: "refund",
+    message: `${session.name} refunded ${input.amount} on Room ${booking.room.number}`,
+    detail: input.reason,
+    severity: "HIGH",
+    userId: session.id,
+    entityId: booking.id,
+  });
+
+  return payment;
 }

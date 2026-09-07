@@ -37,8 +37,8 @@ describe("RBAC matrix consistency", () => {
     }
   });
 
-  it("only owner/manager can apply a hotel discount or manage the menu", () => {
-    const sensitive = ["hotel.discount", "restaurant.manage_menu"];
+  it("only owner/manager can apply a hotel discount, manage the menu, approve an expense, or issue a refund", () => {
+    const sensitive = ["hotel.discount", "restaurant.manage_menu", "finance.approve_expense", "finance.refund"];
     for (const role of ROLES) {
       if (role.name === "owner" || role.name === "manager") continue;
       for (const key of sensitive) {

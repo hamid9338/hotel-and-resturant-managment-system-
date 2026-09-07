@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
-import { Input, Label, Select } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { formatCurrency } from "@/lib/format";
+import { PaymentSplitFields, type PaymentEntry } from "@/components/shared/payment-split-fields";
 
 export function CheckoutModal({
   bookingId,
@@ -20,8 +20,10 @@ export function CheckoutModal({
   onDone: () => void;
 }) {
   const toast = useToast();
-  const [finalPayment, setFinalPayment] = useState("0");
-  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  // Unlike order billing, checkout's sum is unconstrained — a guest can leave
+  // owing a balance, so a blank/zero amount is valid (filtered out on submit,
+  // resulting in an empty payments[] the same as the old finalPayment: 0).
+  const [entries, setEntries] = useState<PaymentEntry[]>([{ method: "CASH", amount: "" }]);
   const [loading, setLoading] = useState(false);
   const [unbilledTotal, setUnbilledTotal] = useState(0);
 
@@ -36,8 +38,9 @@ export function CheckoutModal({
     setLoading(true);
     try {
       await api.post(`/api/bookings/${bookingId}/checkout`, {
-        finalPayment: Number(finalPayment) || 0,
-        paymentMethod,
+        payments: entries
+          .filter((e) => Number(e.amount) > 0)
+          .map((e) => ({ method: e.method, amount: Number(e.amount) })),
       });
       toast.success("Guest checked out");
       onDone();
@@ -69,22 +72,7 @@ export function CheckoutModal({
           separately from the Orders page.
         </div>
       )}
-      <div className="space-y-3">
-        <div>
-          <Label>Final Payment (if settling any balance now)</Label>
-          <Input type="number" min={0} value={finalPayment} onChange={(e) => setFinalPayment(e.target.value)} />
-        </div>
-        <div>
-          <Label>Payment Method</Label>
-          <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-            <option value="CASH">Cash</option>
-            <option value="EASYPAISA">Easypaisa</option>
-            <option value="JAZZCASH">JazzCash</option>
-            <option value="BANK">Bank</option>
-            <option value="CARD">Card</option>
-          </Select>
-        </div>
-      </div>
+      <PaymentSplitFields entries={entries} onChange={setEntries} currency={currency} />
     </Modal>
   );
 }

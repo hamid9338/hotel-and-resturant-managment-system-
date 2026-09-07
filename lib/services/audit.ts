@@ -41,6 +41,7 @@ export async function recordAlert(input: {
   detail?: string;
   severity?: RiskLevel;
   userId?: string;
+  entityId?: string;
 }) {
   await prisma.alert.create({
     data: {
@@ -49,6 +50,7 @@ export async function recordAlert(input: {
       detail: input.detail,
       severity: input.severity ?? "MEDIUM",
       userId: input.userId,
+      entityId: input.entityId,
     },
   });
 }

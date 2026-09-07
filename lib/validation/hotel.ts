@@ -29,9 +29,24 @@ export const createBookingSchema = z
     path: ["cnic"],
   });
 
+export const checkoutPaymentEntrySchema = z.object({
+  method: paymentMethodEnum,
+  amount: z.number().positive(),
+});
+
+// Split-by-payment-method checkout. Unlike restaurant billOrderSchema, the
+// sum here is deliberately unconstrained — it can be less than balanceDue,
+// same as the old single finalPayment field's semantics (a guest can leave
+// owing a balance to settle later). No payments at all is valid too (an
+// empty array), matching "finalPayment: 0" today.
 export const checkoutSchema = z.object({
-  paymentMethod: paymentMethodEnum.default("CASH"),
-  finalPayment: z.number().min(0).default(0),
+  payments: z.array(checkoutPaymentEntrySchema).max(4).default([]),
+});
+
+export const refundBookingSchema = z.object({
+  amount: z.number().positive(),
+  method: paymentMethodEnum,
+  reason: z.string().trim().min(3, { error: "A reason is required for a refund." }),
 });
 
 export const discountSchema = z.object({

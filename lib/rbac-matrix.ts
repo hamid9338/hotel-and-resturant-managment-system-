@@ -45,6 +45,15 @@ export const PERMISSIONS: PermissionDef[] = [
   { key: "settings.edit", module: "settings", description: "Edit business settings" },
   { key: "sync.view", module: "sync", description: "View the offline sync queue" },
   { key: "sync.manage", module: "sync", description: "Manage/retry sync operations" },
+  { key: "inventory.view", module: "inventory", description: "View stock items and movement history" },
+  { key: "inventory.manage", module: "inventory", description: "Create/edit items, suppliers, and purchase orders" },
+  { key: "inventory.adjust_stock", module: "inventory", description: "Manually correct a stock count" },
+  { key: "finance.view", module: "finance", description: "View expenses and cash-shift history" },
+  { key: "finance.log_expense", module: "finance", description: "Create an expense record" },
+  { key: "finance.approve_expense", module: "finance", description: "Approve or reject a pending expense" },
+  { key: "finance.manage_cash_shift", module: "finance", description: "Open and close a cash-register shift" },
+  { key: "finance.refund", module: "finance", description: "Refund a settled bill or booking" },
+  { key: "hotel.manage_maintenance", module: "hotel", description: "Assign and resolve maintenance tickets" },
 ];
 
 const ALL_KEYS = PERMISSIONS.map((p) => p.key);
@@ -78,6 +87,15 @@ export const ROLES: RoleDef[] = [
       "alerts.view",
       "alerts.resolve",
       "sync.view",
+      "inventory.view",
+      "inventory.manage",
+      "inventory.adjust_stock",
+      "finance.view",
+      "finance.log_expense",
+      "finance.approve_expense",
+      "finance.manage_cash_shift",
+      "finance.refund",
+      "hotel.manage_maintenance",
     ],
   },
   {
@@ -112,13 +130,29 @@ export const ROLES: RoleDef[] = [
   {
     name: "cashier",
     label: "Cashier",
-    permissions: ["restaurant.view", "restaurant.create_order", "restaurant.bill_order", "hotel.checkout"],
+    permissions: [
+      "restaurant.view",
+      "restaurant.create_order",
+      "restaurant.bill_order",
+      "hotel.checkout",
+      "finance.view",
+      "finance.log_expense",
+      "finance.manage_cash_shift",
+    ],
   },
   {
     name: "inventory_manager",
     label: "Inventory Manager",
-    // Inventory/purchasing itself is Milestone 2; OCR purchase-bill scanning is
-    // the one active-in-M1 area that overlaps with this role's future scope.
-    permissions: ["ocr.view", "ocr.scan", "ocr.verify", "reports.view"],
+    permissions: [
+      "ocr.view",
+      "ocr.scan",
+      "ocr.verify",
+      "reports.view",
+      "inventory.view",
+      "inventory.manage",
+      "inventory.adjust_stock",
+      "finance.view",
+      "finance.log_expense",
+    ],
   },
 ];

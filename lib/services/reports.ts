@@ -33,6 +33,8 @@ export async function getDashboardSummary(range: { from: Date; to: Date }) {
     hotelRevenueAgg,
     restaurantRevenueAgg,
     purchaseCostsAgg,
+    poCostsAgg,
+    approvedExpensesAgg,
     totalBookings,
     totalOrders,
     roomStatsRaw,
@@ -48,6 +50,14 @@ export async function getDashboardSummary(range: { from: Date; to: Date }) {
     prisma.oCRBill.aggregate({
       _sum: { total: true },
       where: { billType: "PURCHASE", scannedAt: { gte: from, lte: to } },
+    }),
+    prisma.purchaseOrder.aggregate({
+      _sum: { total: true },
+      where: { status: { in: ["RECEIVED", "VERIFIED", "PAID"] }, receivedAt: { gte: from, lte: to } },
+    }),
+    prisma.expense.aggregate({
+      _sum: { amount: true },
+      where: { status: "APPROVED", approvedAt: { gte: from, lte: to } },
     }),
     prisma.booking.count({ where: { status: { not: "CANCELLED" }, ...createdInRange } }),
     prisma.restaurantOrder.count({ where: createdInRange }),
@@ -75,7 +85,14 @@ export async function getDashboardSummary(range: { from: Date; to: Date }) {
 
   const hotelRevenue = toNumber(hotelRevenueAgg._sum.total);
   const restaurantRevenue = toNumber(restaurantRevenueAgg._sum.total);
+  // Three independent cost inputs: OCR-scanned purchase bills, formally
+  // received purchase orders, and approved expenses. Note for training, not a
+  // bug to fix here: if the same physical purchase is entered both as an OCR
+  // bill and a formal PO, it double-counts — nothing in the data model
+  // prevents that, it's a staff-process caution.
   const purchaseCosts = toNumber(purchaseCostsAgg._sum.total);
+  const poCosts = toNumber(poCostsAgg._sum.total);
+  const approvedExpenses = toNumber(approvedExpensesAgg._sum.amount);
 
   const roomStats = Object.fromEntries(roomStatsRaw.map((r) => [r.status, r._count._all]));
 
@@ -84,7 +101,9 @@ export async function getDashboardSummary(range: { from: Date; to: Date }) {
     restaurantRevenue,
     totalRevenue: round2(hotelRevenue + restaurantRevenue),
     purchaseCosts,
-    estimatedProfit: round2(hotelRevenue + restaurantRevenue - purchaseCosts),
+    poCosts,
+    approvedExpenses,
+    estimatedProfit: round2(hotelRevenue + restaurantRevenue - purchaseCosts - poCosts - approvedExpenses),
     totalBookings,
     totalOrders,
     roomStats,

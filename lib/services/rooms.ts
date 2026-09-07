@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { AppError } from "@/lib/api/respond";
 import { recordAudit } from "@/lib/services/audit";
 import type { SessionUser } from "@/lib/auth/session";
-import type { RoomStatus } from "@prisma/client";
+import type { Prisma, RoomStatus } from "@prisma/client";
 
 // Shared by the online PATCH /api/rooms/[id]/status route and the offline
 // sync dispatcher, so a queued housekeeping update gets the identical rule.
@@ -15,13 +15,28 @@ const VALID_TRANSITIONS: Record<string, RoomStatus[]> = {
   housekeeper: ["AVAILABLE", "CLEANING", "MAINTENANCE"],
 };
 
-export async function updateRoomStatus(session: SessionUser, roomId: string, status: RoomStatus) {
+export async function updateRoomStatus(
+  session: SessionUser,
+  roomId: string,
+  status: RoomStatus,
+  opts?: { tx?: Prisma.TransactionClient }
+) {
   const allowed = VALID_TRANSITIONS[session.roleName] ?? [];
   if (!allowed.includes(status)) {
     throw new AppError("INVALID_TRANSITION", `${session.roleName} cannot set room status to ${status}.`, 403);
   }
 
-  const room = await prisma.room.update({ where: { id: roomId }, data: { status } });
+  const db = opts?.tx ?? prisma;
+  const room = await db.room.update({ where: { id: roomId }, data: { status } });
+
+  // A room manually marked available implies its issues are done — auto-
+  // resolves any tickets still open for it rather than leaving them stale.
+  if (status === "AVAILABLE") {
+    await db.maintenanceTicket.updateMany({
+      where: { roomId, status: { in: ["OPEN", "IN_PROGRESS"] } },
+      data: { status: "RESOLVED", resolvedAt: new Date() },
+    });
+  }
 
   await recordAudit({
     session,

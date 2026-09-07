@@ -16,6 +16,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  images: {
+    // Settings.logoUrl (printed invoices) and OCR bill images both live on
+    // Vercel Blob under this pattern — see lib/services/ocr.ts's
+    // isTrustedBlobUrl for the same domain suffix used as a security check.
+    remotePatterns: [{ protocol: "https", hostname: "*.public.blob.vercel-storage.com" }],
+  },
 };
 
 export default nextConfig;

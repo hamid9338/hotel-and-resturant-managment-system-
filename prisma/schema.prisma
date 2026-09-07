@@ -1,6 +1,5 @@
-// Kashmir View Lodges HMS — Milestone 1 schema.
-// Models under "MILESTONE 2 (dormant)" have no API routes or UI yet — they exist now
-// so Milestone 2 can attach recipe/inventory/purchasing features without a painful migration.
+// Kashmir View Lodges HMS — Milestone 1 (hotel/restaurant/OCR/staff core) +
+// Milestone 2 (inventory, purchasing, expenses, cash register, KDS, maintenance) schema.
 
 generator client {
   provider = "prisma-client-js"
@@ -38,6 +37,16 @@ model User {
   alertsResolved     Alert[]           @relation("AlertResolvedBy")
   syncOperations     SyncOperation[]
   loginAttempts      LoginAttempt[]
+
+  stockMovements             StockMovement[]
+  purchaseOrdersCreated      PurchaseOrder[]     @relation("PurchaseOrderCreatedBy")
+  purchaseOrdersReceived     PurchaseOrder[]     @relation("PurchaseOrderReceivedBy")
+  expensesCreated            Expense[]           @relation("ExpenseCreatedBy")
+  expensesApproved           Expense[]           @relation("ExpenseApprovedBy")
+  cashShiftsOpened           CashShift[]         @relation("CashShiftOpenedBy")
+  cashShiftsClosed           CashShift[]         @relation("CashShiftClosedBy")
+  maintenanceTicketsReported MaintenanceTicket[] @relation("MaintenanceReportedBy")
+  maintenanceTicketsAssigned MaintenanceTicket[] @relation("MaintenanceAssignedTo")
 
   @@index([roleId])
 }
@@ -105,16 +114,17 @@ enum RoomStatus {
 }
 
 model Room {
-  id         String     @id @default(uuid())
-  number     String     @unique
-  floor      Int
-  roomTypeId String
-  roomType   RoomType   @relation(fields: [roomTypeId], references: [id])
-  status     RoomStatus @default(AVAILABLE)
-  notes      String?
-  bookings   Booking[]
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id                 String              @id @default(uuid())
+  number             String              @unique
+  floor              Int
+  roomTypeId         String
+  roomType           RoomType            @relation(fields: [roomTypeId], references: [id])
+  status             RoomStatus          @default(AVAILABLE)
+  notes              String?
+  bookings           Booking[]
+  maintenanceTickets MaintenanceTicket[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([status])
   @@index([roomTypeId])
@@ -182,6 +192,7 @@ model Booking {
   checkedOutBy   User?         @relation("BookingCheckedOutBy", fields: [checkedOutById], references: [id])
   checkedInAt    DateTime?
   checkedOutAt   DateTime?
+  invoiceNo      String? // assigned once at checkout from SystemSetting.invoiceNextSeq
 
   payments         Payment[]
   restaurantOrders RestaurantOrder[] // room-service orders billed to this stay
@@ -213,16 +224,19 @@ model Payment {
   booking      Booking?         @relation(fields: [bookingId], references: [id])
   orderId      String?
   order        RestaurantOrder? @relation(fields: [orderId], references: [id])
+  expenseId    String?
+  expense      Expense?         @relation(fields: [expenseId], references: [id])
   amount       Decimal          @db.Decimal(12, 2)
   method       PaymentMethod
   direction    PaymentDirection @default(IN)
-  reference    String?
+  reference    String? // also reused as the required reason text for an OUT refund
   receivedById String
   receivedBy   User             @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
   createdAt    DateTime         @default(now())
 
   @@index([bookingId])
   @@index([orderId])
+  @@index([expenseId])
 }
 
 // ============================================================
@@ -299,24 +313,36 @@ model RestaurantOrder {
   payments       Payment[]
   createdAt      DateTime         @default(now())
   billedAt       DateTime?
+  invoiceNo      String? // assigned once at billing from SystemSetting.invoiceNextSeq
 
   @@index([status])
   @@index([tableId])
   @@index([bookingId])
 }
 
+// Per-item kitchen status, distinct from RestaurantOrder.status (one order can
+// have some items still cooking while others are ready). Nullable: existing
+// M1 rows are all NULL and simply don't appear on the Kitchen Display board;
+// the service layer sets QUEUED for every order item created going forward.
+enum KitchenItemStatus {
+  QUEUED
+  COOKING
+  READY
+  SERVED
+}
+
 model OrderItem {
-  id            String          @id @default(uuid())
+  id            String             @id @default(uuid())
   orderId       String
-  order         RestaurantOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order         RestaurantOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   menuItemId    String
-  menuItem      MenuItem        @relation(fields: [menuItemId], references: [id])
+  menuItem      MenuItem           @relation(fields: [menuItemId], references: [id])
   nameSnapshot  String
-  priceSnapshot Decimal         @db.Decimal(12, 2)
+  priceSnapshot Decimal            @db.Decimal(12, 2)
   qty           Int
   modifiers     Json? // dormant until Milestone 2
   notes         String?
-  status        String? // dormant until Milestone 2 Kitchen Display System
+  status        KitchenItemStatus?
 
   @@index([orderId])
   @@index([menuItemId])
@@ -397,6 +423,7 @@ model Alert {
   message      String
   detail       String?
   severity     RiskLevel @default(MEDIUM)
+  entityId     String? // e.g. InventoryItem.id, so a low-stock alert can be deduped/auto-resolved by exact item
   userId       String?
   user         User?     @relation("AlertForUser", fields: [userId], references: [id])
   resolved     Boolean   @default(false)
@@ -455,24 +482,55 @@ model SyncOperation {
 }
 
 // ============================================================
-// MILESTONE 2 (dormant) — schema only, no API routes or nav entries.
-// Defined now so recipe-based inventory deduction and purchasing can
-// attach later without restructuring MenuItem/OrderItem.
+// MILESTONE 2 — Inventory, Purchasing, Expenses, Cash Register, Maintenance
 // ============================================================
 
 model InventoryItem {
-  id             String       @id @default(uuid())
-  sku            String       @unique
+  id             String              @id @default(uuid())
+  sku            String              @unique
   name           String
   category       String?
   unit           String
-  quantityOnHand Decimal      @default(0) @db.Decimal(12, 3)
-  reorderLevel   Decimal      @default(0) @db.Decimal(12, 3)
-  costPerUnit    Decimal?     @db.Decimal(12, 2)
+  quantityOnHand Decimal             @default(0) @db.Decimal(12, 3)
+  reorderLevel   Decimal             @default(0) @db.Decimal(12, 3)
+  costPerUnit    Decimal?            @db.Decimal(12, 2)
+  active         Boolean             @default(true)
   supplierId     String?
-  supplier       Supplier?    @relation(fields: [supplierId], references: [id])
+  supplier       Supplier?           @relation(fields: [supplierId], references: [id])
   recipeLines    RecipeItem[]
-  createdAt      DateTime     @default(now())
+  movements      StockMovement[]
+  poLines        PurchaseOrderItem[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+enum StockMovementSource {
+  PURCHASE_ORDER_RECEIVED
+  OCR_PURCHASE_POSTED
+  RECIPE_DEDUCTION
+  MANUAL_ADJUSTMENT
+}
+
+// Append-only ledger — the single primitive every stock-changing action
+// writes through (lib/services/inventory.ts::recordStockMovement). No stored
+// "balance after" snapshot: InventoryItem.quantityOnHand is the one
+// denormalized current-state column, always updated in the same transaction
+// as its ledger row — same invariant as Booking.balanceDue alongside Payment.
+model StockMovement {
+  id              String              @id @default(uuid())
+  inventoryItemId String
+  inventoryItem   InventoryItem       @relation(fields: [inventoryItemId], references: [id])
+  quantityDelta   Decimal             @db.Decimal(12, 3) // signed: + in, - out
+  source          StockMovementSource
+  relatedId       String? // PurchaseOrder.id / OCRBill.id / RestaurantOrder.id — null for manual
+  reason          String? // required by validation for MANUAL_ADJUSTMENT
+  createdById     String
+  createdBy       User                @relation(fields: [createdById], references: [id])
+  createdAt       DateTime            @default(now())
+
+  @@index([inventoryItemId])
+  @@index([source])
+  @@index([createdAt])
 }
 
 model Supplier {
@@ -488,24 +546,74 @@ model Supplier {
   createdAt      DateTime        @default(now())
 }
 
+enum PurchaseOrderStatus {
+  DRAFT
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  VERIFIED
+  PAID
+  CANCELLED
+}
+
 model PurchaseOrder {
-  id         String   @id @default(uuid())
-  supplierId String
-  supplier   Supplier @relation(fields: [supplierId], references: [id])
-  status     String   @default("draft") // draft|ordered|received|verified|paid
-  total      Decimal  @default(0) @db.Decimal(12, 2)
-  createdAt  DateTime @default(now())
+  id           String              @id @default(uuid())
+  supplierId   String
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  status       PurchaseOrderStatus @default(DRAFT)
+  total        Decimal             @default(0) @db.Decimal(12, 2) // service-computed from items, not set directly
+  notes        String?
+  createdById  String
+  createdBy    User                @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
+  receivedById String? // most recent receiving event's actor
+  receivedBy   User?               @relation("PurchaseOrderReceivedBy", fields: [receivedById], references: [id])
+  receivedAt   DateTime? // most recent receiving event's timestamp
+  items        PurchaseOrderItem[]
+  createdAt    DateTime            @default(now())
+
+  @@index([status])
+  @@index([supplierId])
+}
+
+// quantityReceived is a running cumulative total across possibly-many
+// receiving events (multi-delivery partial receiving) — not a one-shot flag.
+model PurchaseOrderItem {
+  id               String        @id @default(uuid())
+  poId             String
+  purchaseOrder    PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  inventoryItemId  String
+  inventoryItem    InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  quantityOrdered  Decimal       @db.Decimal(12, 3)
+  unitCost         Decimal       @db.Decimal(12, 2)
+  quantityReceived Decimal       @default(0) @db.Decimal(12, 3)
+
+  @@index([poId])
+  @@index([inventoryItemId])
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model Expense {
-  id         String         @id @default(uuid())
-  category   String
-  amount     Decimal        @db.Decimal(12, 2)
-  method     PaymentMethod?
-  status     String         @default("pending") // pending|approved|rejected
-  notes      String?
-  receiptUrl String?
-  createdAt  DateTime       @default(now())
+  id           String         @id @default(uuid())
+  category     String
+  amount       Decimal        @db.Decimal(12, 2)
+  method       PaymentMethod?
+  status       ExpenseStatus  @default(PENDING)
+  notes        String?
+  receiptUrl   String?
+  createdById  String
+  createdBy    User           @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?          @relation("ExpenseApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  payments     Payment[]
+  createdAt    DateTime       @default(now())
+
+  @@index([status])
 }
 
 model RecipeItem {
@@ -517,4 +625,67 @@ model RecipeItem {
   quantityUsed    Decimal       @db.Decimal(12, 3)
 
   @@unique([menuItemId, inventoryItemId])
+}
+
+enum CashShiftStatus {
+  OPEN
+  CLOSED
+}
+
+// Enforcing "only one OPEN shift at a time" needs a hand-added partial unique
+// index (Prisma's DSL has no @@unique(..., where:)) — added by hand to the
+// migration, same category as the Booking EXCLUDE constraint. expectedAmount/
+// variance are frozen at close time, never live-recomputed (a refund
+// processed later shouldn't retroactively rewrite an already-counted drawer).
+model CashShift {
+  id                   String          @id @default(uuid())
+  openedById           String
+  openedBy             User            @relation("CashShiftOpenedBy", fields: [openedById], references: [id])
+  openedAt             DateTime        @default(now())
+  openingFloat         Decimal         @db.Decimal(12, 2)
+  closedById           String?
+  closedBy             User?           @relation("CashShiftClosedBy", fields: [closedById], references: [id])
+  closedAt             DateTime?
+  closingCountedAmount Decimal?        @db.Decimal(12, 2)
+  expectedAmount       Decimal?        @db.Decimal(12, 2)
+  variance             Decimal?        @db.Decimal(12, 2)
+  status               CashShiftStatus @default(OPEN)
+  notes                String?
+
+  @@index([status])
+  @@index([openedById])
+}
+
+enum MaintenanceTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum MaintenanceTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+model MaintenanceTicket {
+  id           String                    @id @default(uuid())
+  roomId       String?
+  room         Room?                     @relation(fields: [roomId], references: [id])
+  title        String
+  description  String?
+  priority     MaintenanceTicketPriority @default(MEDIUM)
+  status       MaintenanceTicketStatus   @default(OPEN)
+  reportedById String
+  reportedBy   User                      @relation("MaintenanceReportedBy", fields: [reportedById], references: [id])
+  assignedToId String?
+  assignedTo   User?                     @relation("MaintenanceAssignedTo", fields: [assignedToId], references: [id])
+  resolvedAt   DateTime?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@index([roomId])
+  @@index([status])
 }

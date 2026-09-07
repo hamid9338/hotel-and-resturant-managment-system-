@@ -8,12 +8,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { usePermissions } from "@/components/permissions-provider";
 import { useToast } from "@/components/ui/toast";
+import { ReportIssueModal } from "@/components/hotel/report-issue-modal";
 import type { RoomWithBookings } from "@/lib/types/hotel";
 
 export function HousekeepingBoard() {
   const { has } = usePermissions();
   const toast = useToast();
   const [rooms, setRooms] = useState<RoomWithBookings[] | null>(null);
+  const [reportingRoom, setReportingRoom] = useState<{ id: string; number: string } | null>(null);
 
   const load = useCallback(() => {
     api
@@ -64,7 +66,12 @@ export function HousekeepingBoard() {
                     <Button size="sm" variant="success" className="w-full" onClick={() => setStatus(r.id, "AVAILABLE")}>
                       Mark Clean
                     </Button>
-                    <Button size="sm" variant="ghost" className="w-full" onClick={() => setStatus(r.id, "MAINTENANCE")}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full"
+                      onClick={() => setReportingRoom({ id: r.id, number: r.number })}
+                    >
                       Report Issue
                     </Button>
                   </div>
@@ -99,6 +106,18 @@ export function HousekeepingBoard() {
           </div>
         )}
       </section>
+
+      {reportingRoom && (
+        <ReportIssueModal
+          roomId={reportingRoom.id}
+          roomNumber={reportingRoom.number}
+          onClose={() => setReportingRoom(null)}
+          onDone={() => {
+            setReportingRoom(null);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }

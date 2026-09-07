@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
 import { usePermissions } from "@/components/permissions-provider";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { PostOcrModal } from "@/components/inventory/post-ocr-modal";
 
 type ExtractedItem = { name: string; qty: string; unit: number; total: number };
 type Extracted = {
@@ -33,6 +34,8 @@ type PastBill = {
   total: string;
   confidence: number;
   verified: boolean;
+  inventoryPosted: boolean;
+  items: ExtractedItem[];
   scannedAt: string;
   scannedBy: { name: string };
 };
@@ -68,6 +71,7 @@ export function BillScanner({ ocrConfigured, currency }: { ocrConfigured: boolea
   const [form, setForm] = useState<Extracted | null>(null);
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<PastBill[] | null>(null);
+  const [posting, setPosting] = useState<PastBill | null>(null);
 
   const loadHistory = () =>
     api
@@ -268,12 +272,30 @@ export function BillScanner({ ocrConfigured, currency }: { ocrConfigured: boolea
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs">{formatCurrency(Number(b.total), currency)}</span>
                   <Badge tone={b.verified ? "success" : "warning"}>{b.verified ? "Verified" : "Unverified"}</Badge>
+                  {b.billType === "PURCHASE" && b.inventoryPosted && <Badge tone="success">Posted</Badge>}
+                  {b.billType === "PURCHASE" && b.verified && !b.inventoryPosted && has("inventory.manage") && (
+                    <Button size="sm" variant="secondary" onClick={() => setPosting(b)}>
+                      Post to Inventory
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      {posting && (
+        <PostOcrModal
+          billId={posting.id}
+          items={posting.items}
+          onClose={() => setPosting(null)}
+          onDone={() => {
+            setPosting(null);
+            loadHistory();
+          }}
+        />
+      )}
     </div>
   );
 }
