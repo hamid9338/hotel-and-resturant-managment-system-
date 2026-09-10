@@ -4,9 +4,9 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { createBookingSchema } from "@/lib/validation/hotel";
 import { createBooking } from "@/lib/services/bookings";
 import { prisma } from "@/lib/db";
-import { ok, handleRouteError } from "@/lib/api/respond";
+import { ok, fail, handleRouteError } from "@/lib/api/respond";
 import { toCsv, csvResponse } from "@/lib/csv";
-import type { Prisma } from "@prisma/client";
+import { BookingStatus, type Prisma } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const status = searchParams.get("status");
     const roomId = searchParams.get("roomId");
+    if (status && !Object.values(BookingStatus).includes(status as BookingStatus)) {
+      return fail("INVALID_STATUS", `"${status}" is not a valid booking status.`, 400);
+    }
 
     const bookings = await prisma.booking.findMany({
       where: {

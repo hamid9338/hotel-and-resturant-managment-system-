@@ -8,14 +8,18 @@ import { prisma } from "@/lib/db";
 const COOKIE_NAME = "session";
 const SESSION_DURATION_SECONDS = 60 * 60 * 12; // 12h — matches the prototype's token lifetime
 
+// Fails at module load (the first request in a cold serverless instance that
+// touches anything auth-related) rather than only surfacing deep inside a
+// login/session-read call — a misconfigured deployment should fail loudly
+// and immediately, not serve public pages fine while auth silently breaks.
+if (!process.env.JWT_SECRET) {
+  throw new Error(
+    "JWT_SECRET is not set. Generate one with `openssl rand -base64 32` and add it to your environment."
+  );
+}
+
 function secretKey() {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error(
-      "JWT_SECRET is not set. Generate one with `openssl rand -base64 32` and add it to your environment."
-    );
-  }
-  return new TextEncoder().encode(secret);
+  return new TextEncoder().encode(process.env.JWT_SECRET!);
 }
 
 export async function createSessionCookie(userId: string) {

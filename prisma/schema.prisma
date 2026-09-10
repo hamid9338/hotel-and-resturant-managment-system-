@@ -204,6 +204,7 @@ model Booking {
   @@index([roomId, status])
   @@index([guestId])
   @@index([checkIn, checkOut])
+  @@index([createdAt]) // recent-bookings lists and the CSV/print report both sort on this
 }
 
 enum PaymentMethod {
@@ -238,6 +239,7 @@ model Payment {
   @@index([bookingId])
   @@index([orderId])
   @@index([expenseId])
+  @@index([method, direction, createdAt]) // cash-shift reconciliation's aggregate query, polled every 15s
 }
 
 // ============================================================
@@ -319,6 +321,7 @@ model RestaurantOrder {
   @@index([status])
   @@index([tableId])
   @@index([bookingId])
+  @@index([status, createdAt]) // listOrders' filter+sort — polled every 15s by orders-board.tsx and kitchen-display.tsx
 }
 
 // Per-item kitchen status, distinct from RestaurantOrder.status (one order can
@@ -435,6 +438,7 @@ model Alert {
 
   @@index([resolved])
   @@index([resolved, createdAt]) // bell polling adds a hot, frequent access pattern on top of the staff/alerts page
+  @@index([type, entityId, resolved]) // syncDedupedAlert/syncLowStockAlert's exact dedup-lookup shape
 }
 
 // ============================================================

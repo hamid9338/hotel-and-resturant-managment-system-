@@ -91,6 +91,7 @@ export async function listInventoryItems(includeInactive = false) {
     where: includeInactive ? undefined : { active: true },
     include: { supplier: { select: { id: true, name: true } } },
     orderBy: { name: "asc" },
+    take: 500,
   });
 }
 

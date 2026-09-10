@@ -11,6 +11,7 @@ export async function GET() {
       where: { resolved: false },
       include: { user: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
+      take: 200,
     });
     return ok(alerts);
   } catch (err) {

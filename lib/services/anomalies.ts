@@ -118,6 +118,7 @@ export async function runAnomalyChecksIfDue(): Promise<void> {
     prisma.inventoryItem.findMany({
       where: { active: true },
       select: { id: true, name: true, quantityOnHand: true, reorderLevel: true },
+      take: 500,
     }),
     prisma.stockMovement.groupBy({
       by: ["inventoryItemId"],
