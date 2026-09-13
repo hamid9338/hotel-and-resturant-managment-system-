@@ -10,6 +10,9 @@ export const syncOperationKindEnum = z.enum([
   "orders.create",
   "orders.updateStatus",
   "rooms.updateStatus",
+  "purchaseOrders.create",
+  "expenses.create",
+  "inventory.adjustStock",
 ]);
 
 export const syncOperationSchema = z.object({

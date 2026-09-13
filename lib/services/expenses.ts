@@ -24,9 +24,11 @@ export async function listExpenses(filters: { status?: string }) {
   });
 }
 
-export async function createExpense(session: SessionUser, input: CreateExpenseInput) {
+export async function createExpense(session: SessionUser, input: CreateExpenseInput, opts?: { id?: string }) {
   const expense = await prisma.expense.create({
     data: {
+      // See the matching comment in lib/services/bookings.ts::createBooking.
+      id: opts?.id,
       category: input.category,
       amount: input.amount,
       method: input.method,

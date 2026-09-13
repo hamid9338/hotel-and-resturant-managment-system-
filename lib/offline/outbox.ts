@@ -1,15 +1,13 @@
 import { openDB, type IDBPDatabase } from "idb";
+import type { SyncOperationInput } from "@/lib/validation/sync";
 
 const DB_NAME = "kvl-outbox";
 const STORE = "operations";
 
-export type OperationKind =
-  | "bookings.create"
-  | "bookings.checkin"
-  | "bookings.checkout"
-  | "orders.create"
-  | "orders.updateStatus"
-  | "rooms.updateStatus";
+// Derived from the Zod schema (type-only import — lib/validation/sync.ts has
+// no server-only guard, so this is safe client-side) rather than a hand-
+// duplicated union, so the two lists can't drift out of sync with each other.
+export type OperationKind = SyncOperationInput["operationKind"];
 
 export type QueuedOperation = {
   id: string;

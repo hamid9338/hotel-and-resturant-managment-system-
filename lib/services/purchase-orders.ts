@@ -32,11 +32,19 @@ export async function listPurchaseOrders(filters: { status?: string }) {
   });
 }
 
-export async function createPurchaseOrder(session: SessionUser, input: CreatePurchaseOrderInput) {
+export async function createPurchaseOrder(
+  session: SessionUser,
+  input: CreatePurchaseOrderInput,
+  opts?: { id?: string }
+) {
   const total = round2(input.items.reduce((sum, line) => sum + line.quantityOrdered * line.unitCost, 0));
 
   const po = await prisma.purchaseOrder.create({
     data: {
+      // See the matching comment in lib/services/bookings.ts::createBooking —
+      // lets the offline-sync dispatcher assign the id the client already
+      // generated while queued, so it matches the id promised to the user.
+      id: opts?.id,
       supplierId: input.supplierId,
       notes: input.notes,
       total,

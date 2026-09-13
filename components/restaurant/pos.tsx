@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { formatCurrency } from "@/lib/format";
 import { SkeletonRows } from "@/components/ui/skeleton";
+import { submitOrQueue } from "@/lib/offline/sync-client";
+import { useSessionUser } from "@/components/session-provider";
 
 type MenuItem = {
   id: string;
@@ -28,6 +30,7 @@ const ORDER_TYPES = [
 
 export function Pos({ currency }: { currency: string }) {
   const toast = useToast();
+  const { id: userId } = useSessionUser();
   const [menu, setMenu] = useState<MenuItem[] | null>(null);
   const [tables, setTables] = useState<TableInfo[] | null>(null);
   const [occupiedRooms, setOccupiedRooms] = useState<OccupiedRoom[]>([]);
@@ -83,14 +86,21 @@ export function Pos({ currency }: { currency: string }) {
 
   const placeOrder = async () => {
     setPlacing(true);
+    const payload = {
+      orderType,
+      tableId: orderType === "DINE_IN" ? tableId : undefined,
+      roomId: orderType === "ROOM_SERVICE" ? roomId : undefined,
+      items: cart.map((l) => ({ menuItemId: l.menuItemId, qty: l.qty })),
+    };
     try {
-      await api.post("/api/orders", {
-        orderType,
-        tableId: orderType === "DINE_IN" ? tableId : undefined,
-        roomId: orderType === "ROOM_SERVICE" ? roomId : undefined,
-        items: cart.map((l) => ({ menuItemId: l.menuItemId, qty: l.qty })),
+      const { queued } = await submitOrQueue({
+        operationKind: "orders.create",
+        entityId: crypto.randomUUID(),
+        userId,
+        payload,
+        onlineCall: () => api.post("/api/orders", payload),
       });
-      toast.success("Order placed");
+      toast.success(queued ? "You're offline — this order will sync automatically once you're back online." : "Order placed");
       setCart([]);
       setTableId(null);
       api

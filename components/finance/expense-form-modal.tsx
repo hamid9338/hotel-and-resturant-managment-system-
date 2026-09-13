@@ -6,9 +6,12 @@ import { Input, Label, Select } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { api, uploadFile, ApiError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
+import { submitOrQueue } from "@/lib/offline/sync-client";
+import { useSessionUser } from "@/components/session-provider";
 
 export function ExpenseFormModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const toast = useToast();
+  const { id: userId } = useSessionUser();
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("CASH");
@@ -26,14 +29,23 @@ export function ExpenseFormModal({ onClose, onDone }: { onClose: () => void; onD
         const uploaded = await uploadFile<{ url: string }>("/api/expenses/receipt-upload", form);
         receiptUrl = uploaded.url;
       }
-      await api.post("/api/expenses", {
+      const payload = {
         category: category.trim(),
         amount: Number(amount),
         method,
         notes: notes.trim() || undefined,
         receiptUrl,
+      };
+      const { queued } = await submitOrQueue({
+        operationKind: "expenses.create",
+        entityId: crypto.randomUUID(),
+        userId,
+        payload,
+        onlineCall: () => api.post("/api/expenses", payload),
       });
-      toast.success("Expense logged");
+      toast.success(
+        queued ? "You're offline — this expense will sync automatically once you're back online." : "Expense logged"
+      );
       onDone();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not log expense.");

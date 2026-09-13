@@ -9,6 +9,8 @@ import { api, ApiError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { round2 } from "@/lib/money";
 import { formatCurrency } from "@/lib/format";
+import { submitOrQueue } from "@/lib/offline/sync-client";
+import { useSessionUser } from "@/components/session-provider";
 
 type Supplier = { id: string; name: string };
 type InventoryItem = { id: string; name: string; unit: string };
@@ -28,6 +30,7 @@ export function CreatePurchaseOrderModal({
   onDone: () => void;
 }) {
   const toast = useToast();
+  const { id: userId } = useSessionUser();
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<Line[]>([{ inventoryItemId: items[0]?.id ?? "", quantityOrdered: "", unitCost: "" }]);
@@ -46,17 +49,28 @@ export function CreatePurchaseOrderModal({
 
   const submit = async () => {
     setLoading(true);
+    const payload = {
+      supplierId,
+      notes: notes.trim() || undefined,
+      items: lines.map((l) => ({
+        inventoryItemId: l.inventoryItemId,
+        quantityOrdered: Number(l.quantityOrdered),
+        unitCost: Number(l.unitCost) || 0,
+      })),
+    };
     try {
-      await api.post("/api/purchase-orders", {
-        supplierId,
-        notes: notes.trim() || undefined,
-        items: lines.map((l) => ({
-          inventoryItemId: l.inventoryItemId,
-          quantityOrdered: Number(l.quantityOrdered),
-          unitCost: Number(l.unitCost) || 0,
-        })),
+      const { queued } = await submitOrQueue({
+        operationKind: "purchaseOrders.create",
+        entityId: crypto.randomUUID(),
+        userId,
+        payload,
+        onlineCall: () => api.post("/api/purchase-orders", payload),
       });
-      toast.success("Purchase order created");
+      toast.success(
+        queued
+          ? "You're offline — this purchase order will sync automatically once you're back online."
+          : "Purchase order created"
+      );
       onDone();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not create purchase order.");

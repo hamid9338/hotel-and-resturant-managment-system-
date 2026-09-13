@@ -6,8 +6,14 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/permissions";
 import { createBooking, checkInBooking, checkOutBooking } from "@/lib/services/bookings";
 import { createOrder, updateOrderStatus } from "@/lib/services/orders";
 import { updateRoomStatus } from "@/lib/services/rooms";
+import { createPurchaseOrder } from "@/lib/services/purchase-orders";
+import { createExpense } from "@/lib/services/expenses";
+import { adjustStock } from "@/lib/services/inventory";
 import { createBookingSchema, checkoutSchema, roomStatusSchema } from "@/lib/validation/hotel";
 import { createOrderSchema, updateOrderStatusSchema } from "@/lib/validation/restaurant";
+import { createPurchaseOrderSchema } from "@/lib/validation/purchasing";
+import { createExpenseSchema } from "@/lib/validation/expenses";
+import { adjustStockSchema } from "@/lib/validation/inventory";
 import type { SessionUser } from "@/lib/auth/session";
 import type { SyncOperationInput } from "@/lib/validation/sync";
 
@@ -71,14 +77,15 @@ export async function applySyncOperation(session: SessionUser, op: SyncOperation
   }
 }
 
-// createBooking/checkInBooking/checkOutBooking/createOrder/updateOrderStatus
-// trust their caller to have already checked permissions — that's the online
-// route handler's job for the online path. This dispatcher IS the caller for
-// the offline path, so it must repeat each route's exact requirePermission()
-// call itself; skipping it would let any authenticated device bypass RBAC
-// for every whitelisted offline operation kind. updateRoomStatus is the one
-// exception: it enforces its own role-based transition table internally
-// (see lib/services/rooms.ts), so no separate check is needed here for it.
+// createBooking/checkInBooking/checkOutBooking/createOrder/updateOrderStatus/
+// createPurchaseOrder/createExpense/adjustStock all trust their caller to
+// have already checked permissions — that's the online route handler's job
+// for the online path. This dispatcher IS the caller for the offline path,
+// so it must repeat each route's exact requirePermission() call itself;
+// skipping it would let any authenticated device bypass RBAC for every
+// whitelisted offline operation kind. updateRoomStatus is the one exception:
+// it enforces its own role-based transition table internally (see
+// lib/services/rooms.ts), so no separate check is needed here for it.
 async function dispatch(session: SessionUser, op: SyncOperationInput): Promise<string | undefined> {
   switch (op.operationKind) {
     case "bookings.create": {
@@ -123,6 +130,30 @@ async function dispatch(session: SessionUser, op: SyncOperationInput): Promise<s
       const input = roomStatusSchema.parse({ status });
       const room = await updateRoomStatus(session, String(roomId), input.status);
       return room.id;
+    }
+    case "purchaseOrders.create": {
+      await requirePermission(session, "inventory.manage");
+      const input = createPurchaseOrderSchema.parse(op.payload);
+      const po = await createPurchaseOrder(session, input, { id: op.entityId });
+      return po.id;
+    }
+    case "expenses.create": {
+      await requirePermission(session, "finance.log_expense");
+      const input = createExpenseSchema.parse(op.payload);
+      const expense = await createExpense(session, input, { id: op.entityId });
+      return expense.id;
+    }
+    case "inventory.adjustStock": {
+      await requirePermission(session, "inventory.adjust_stock");
+      // The target item's id travels inside the payload, not op.entityId —
+      // see the matching comment in components/inventory/inventory-item-modal.tsx:
+      // entityId is this queued operation's own idempotency key, and reusing
+      // the item's id there would make a second offline adjustment to the
+      // same item collide with the first's dedup record.
+      const { inventoryItemId, ...rest } = op.payload as { inventoryItemId: string } & Record<string, unknown>;
+      const input = adjustStockSchema.parse(rest);
+      const item = await adjustStock(session, String(inventoryItemId), input);
+      return item.id;
     }
     default:
       throw new AppError("UNKNOWN_OPERATION", `Unknown operation kind.`, 400);

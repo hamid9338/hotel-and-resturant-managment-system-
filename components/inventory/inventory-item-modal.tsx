@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { usePermissions } from "@/components/permissions-provider";
+import { submitOrQueue } from "@/lib/offline/sync-client";
+import { useSessionUser } from "@/components/session-provider";
 
 type Supplier = { id: string; name: string };
 type Item = {
@@ -34,6 +36,7 @@ export function InventoryItemModal({
 }) {
   const toast = useToast();
   const { has } = usePermissions();
+  const { id: userId } = useSessionUser();
   const [sku, setSku] = useState(item?.sku ?? "");
   const [name, setName] = useState(item?.name ?? "");
   const [category, setCategory] = useState(item?.category ?? "");
@@ -75,12 +78,24 @@ export function InventoryItemModal({
   const submitAdjustment = async () => {
     if (!item) return;
     setAdjusting(true);
+    const quantityDelta = Number(adjustDelta);
+    const reason = adjustReason.trim();
     try {
-      await api.post(`/api/inventory/${item.id}/adjust`, {
-        quantityDelta: Number(adjustDelta),
-        reason: adjustReason.trim(),
+      const { queued } = await submitOrQueue({
+        operationKind: "inventory.adjustStock",
+        // A fresh id, NOT item.id — this becomes the queued operation's own
+        // idempotency key. Reusing the item's id would make a second offline
+        // adjustment to the SAME item collide with the first's dedup record
+        // and get silently dropped as a "duplicate" once the first applies.
+        // The actual target item travels inside the payload instead.
+        entityId: crypto.randomUUID(),
+        userId,
+        payload: { inventoryItemId: item.id, quantityDelta, reason },
+        onlineCall: () => api.post(`/api/inventory/${item.id}/adjust`, { quantityDelta, reason }),
       });
-      toast.success("Stock adjusted");
+      toast.success(
+        queued ? "You're offline — this stock adjustment will sync automatically once you're back online." : "Stock adjusted"
+      );
       onDone();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not adjust stock.");
