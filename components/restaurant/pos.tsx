@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, Plus, Minus, Trash2, Send } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
+import { fetchWithCache } from "@/lib/offline/data-cache";
 import { Input, Select } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatRelativeTime } from "@/lib/format";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { submitOrQueue } from "@/lib/offline/sync-client";
 import { useSessionUser } from "@/components/session-provider";
@@ -41,17 +43,27 @@ export function Pos({ currency }: { currency: string }) {
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [placing, setPlacing] = useState(false);
+  const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
 
   useEffect(() => {
-    api.get<MenuItem[]>("/api/menu").then(setMenu).catch(() => setMenu([]));
-    api.get<TableInfo[]>("/api/tables").then(setTables).catch(() => setTables([]));
+    fetchWithCache("/api/menu", () => api.get<MenuItem[]>("/api/menu"))
+      .then(({ data, cachedAt, stale }) => {
+        setMenu(data);
+        if (stale) setCacheInfo({ cachedAt, stale });
+      })
+      .catch(() => setMenu([]));
+    fetchWithCache("/api/tables", () => api.get<TableInfo[]>("/api/tables"))
+      .then(({ data, cachedAt, stale }) => {
+        setTables(data);
+        if (stale) setCacheInfo({ cachedAt, stale });
+      })
+      .catch(() => setTables([]));
   }, []);
 
   useEffect(() => {
     if (orderType === "ROOM_SERVICE") {
-      api
-        .get<OccupiedRoom[]>("/api/rooms/occupied")
-        .then(setOccupiedRooms)
+      fetchWithCache("/api/rooms/occupied", () => api.get<OccupiedRoom[]>("/api/rooms/occupied"))
+        .then(({ data }) => setOccupiedRooms(data))
         .catch(() => setOccupiedRooms([]));
     }
   }, [orderType]);
@@ -119,6 +131,9 @@ export function Pos({ currency }: { currency: string }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
       <div className="space-y-4">
+        {cacheInfo?.stale && (
+          <Badge tone="warning">Showing data from {formatRelativeTime(cacheInfo.cachedAt)} — offline</Badge>
+        )}
         <h1 className="font-display text-2xl font-semibold">Point of Sale</h1>
 
         <div className="flex flex-wrap gap-1.5">

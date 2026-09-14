@@ -44,19 +44,27 @@ export function DashboardContent({ currency }: { currency: string }) {
   const [period, setPeriod] = useState("today");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [trend, setTrend] = useState<Trend[]>([]);
+  const [loadError, setLoadError] = useState(false);
 
   // Deliberately keeps showing the previous period's numbers while a new
   // period loads (rather than a `loading` flag flashing a skeleton on every
   // click) — only the very first load has no data yet to show.
   useEffect(() => {
     let active = true;
-    Promise.all([api.get<Summary>(`/api/reports/summary?period=${period}`), api.get<Trend[]>(`/api/reports/daily?days=7`)]).then(
-      ([s, t]) => {
+    Promise.all([api.get<Summary>(`/api/reports/summary?period=${period}`), api.get<Trend[]>(`/api/reports/daily?days=7`)])
+      .then(([s, t]) => {
         if (!active) return;
         setSummary(s);
         setTrend(t);
-      }
-    );
+        setLoadError(false);
+      })
+      .catch(() => {
+        // A failed fetch previously left this stuck on the loading skeleton
+        // forever — this is a poor caching candidate (a heavy, fully
+        // recomputed aggregate, not a raw list), so the fix is just failing
+        // visibly instead of hanging, not caching the numbers.
+        if (active) setLoadError(true);
+      });
     return () => {
       active = false;
     };
@@ -81,7 +89,11 @@ export function DashboardContent({ currency }: { currency: string }) {
         </div>
       </div>
 
-      {!summary ? (
+      {!summary && loadError ? (
+        <div className="rounded-xl border border-border-default bg-surface-1 p-8 text-center text-sm text-muted">
+          Couldn&apos;t load dashboard data — check your connection.
+        </div>
+      ) : !summary ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-24" />

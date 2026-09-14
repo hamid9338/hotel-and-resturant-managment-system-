@@ -15,7 +15,7 @@ describe.skipIf(!hasRealDb)("offline sync — purchasing operations", () => {
       const { prisma } = await import("@/lib/db");
       const { applySyncOperation } = await import("@/lib/services/sync");
       const owner = await prisma.user.findFirstOrThrow({ where: { role: { name: "owner" } } });
-      const session = { id: owner.id, name: owner.name, username: owner.username, roleId: owner.roleId, roleName: "owner", shift: null };
+      const session = { id: owner.id, name: owner.name, username: owner.username, roleId: owner.roleId, roleName: "owner", shift: null, permissionKeys: [], authSource: "db" as const };
       const id = crypto.randomUUID();
 
       try {
@@ -44,7 +44,7 @@ describe.skipIf(!hasRealDb)("offline sync — purchasing operations", () => {
       const { prisma } = await import("@/lib/db");
       const { applySyncOperation } = await import("@/lib/services/sync");
       const owner = await prisma.user.findFirstOrThrow({ where: { role: { name: "owner" } } });
-      const session = { id: owner.id, name: owner.name, username: owner.username, roleId: owner.roleId, roleName: "owner", shift: null };
+      const session = { id: owner.id, name: owner.name, username: owner.username, roleId: owner.roleId, roleName: "owner", shift: null, permissionKeys: [], authSource: "db" as const };
 
       const suffix = Date.now();
       const supplier = await prisma.supplier.create({ data: { name: `Test Sync Supplier-${suffix}` } });
@@ -82,7 +82,7 @@ describe.skipIf(!hasRealDb)("offline sync — purchasing operations", () => {
       const { prisma } = await import("@/lib/db");
       const { applySyncOperation } = await import("@/lib/services/sync");
       const owner = await prisma.user.findFirstOrThrow({ where: { role: { name: "owner" } } });
-      const session = { id: owner.id, name: owner.name, username: owner.username, roleId: owner.roleId, roleName: "owner", shift: null };
+      const session = { id: owner.id, name: owner.name, username: owner.username, roleId: owner.roleId, roleName: "owner", shift: null, permissionKeys: [], authSource: "db" as const };
 
       const suffix = Date.now();
       const item = await prisma.inventoryItem.create({
@@ -120,7 +120,7 @@ describe.skipIf(!hasRealDb)("offline sync — purchasing operations", () => {
       const { applySyncOperation } = await import("@/lib/services/sync");
       const role = await prisma.role.findUniqueOrThrow({ where: { name: "waiter" } });
       const waiter = await prisma.user.findFirstOrThrow({ where: { roleId: role.id } });
-      const session = { id: waiter.id, name: waiter.name, username: waiter.username, roleId: role.id, roleName: "waiter", shift: null };
+      const session = { id: waiter.id, name: waiter.name, username: waiter.username, roleId: role.id, roleName: "waiter", shift: null, permissionKeys: [], authSource: "db" as const };
 
       const cases: {
         operationKind: "expenses.create" | "purchaseOrders.create" | "inventory.adjustStock";
@@ -159,7 +159,7 @@ describe.skipIf(!hasRealDb)("offline sync — purchasing operations", () => {
       const { prisma } = await import("@/lib/db");
       const { applySyncOperation } = await import("@/lib/services/sync");
       const owner = await prisma.user.findFirstOrThrow({ where: { role: { name: "owner" } } });
-      const session = { id: owner.id, name: owner.name, username: owner.username, roleId: owner.roleId, roleName: "owner", shift: null };
+      const session = { id: owner.id, name: owner.name, username: owner.username, roleId: owner.roleId, roleName: "owner", shift: null, permissionKeys: [], authSource: "db" as const };
       const id = crypto.randomUUID();
       const op = {
         id,

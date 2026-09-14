@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, LogOut, Wifi, WifiOff } from "lucide-react";
@@ -39,11 +39,24 @@ export function DashboardShell({
   const visibleItems = NAV_ITEMS.filter((item) => !item.permission || item.permission.some((p) => permissions.includes(p)));
   const sections = [...new Set(visibleItems.map((i) => i.section))];
 
+  // Warms the service worker's page cache for every route this user can
+  // reach, so a later outage has real pages to fall back to instead of just
+  // the 3 install-time shell URLs. Runs on mount and again on reconnect,
+  // mirroring SyncManager's own "on mount + on online" cadence.
+  useEffect(() => {
+    if (!online) return;
+    visibleItems.forEach((item) => {
+      fetch(item.href, { cache: "no-store" }).catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online]);
+
   const logout = async () => {
     await api.post("/api/auth/logout").catch(() => {});
     // A front desk terminal may be shared across shifts — never leave one
-    // staff member's queued-but-unsynced writes visible to the next.
+    // staff member's queued-but-unsynced writes, or cached pages, visible to the next.
     await clearOutboxForUser(user.id).catch(() => {});
+    navigator.serviceWorker?.controller?.postMessage({ type: "CLEAR_PAGE_CACHE" });
     router.push("/login");
     router.refresh();
   };

@@ -14,7 +14,7 @@ describe.skipIf(!hasRealDb)("multi-delivery purchase order receiving", () => {
 
       const suffix = Date.now();
       const user = await prisma.user.findFirstOrThrow();
-      const session = { id: user.id, name: user.name, username: user.username, roleId: user.roleId, roleName: "owner", shift: null };
+      const session = { id: user.id, name: user.name, username: user.username, roleId: user.roleId, roleName: "owner", shift: null, permissionKeys: [], authSource: "db" as const };
 
       const supplier = await prisma.supplier.create({ data: { name: `Test Supplier-${suffix}` } });
       const item = await prisma.inventoryItem.create({

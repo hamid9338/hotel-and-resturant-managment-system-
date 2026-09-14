@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { ChefHat } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
+import { fetchWithCache } from "@/lib/offline/data-cache";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRows } from "@/components/ui/skeleton";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatRelativeTime } from "@/lib/format";
 
 type OrderItemRow = { id: string; nameSnapshot: string; qty: number; status: string | null };
 type Order = {
@@ -32,11 +33,14 @@ const ITEM_STATUS_TONE: Record<string, "neutral" | "warning" | "info" | "success
 
 export function KitchenDisplay() {
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
 
   const load = useCallback(() => {
-    api
-      .get<Order[]>("/api/orders")
-      .then((all) => setOrders(all.filter((o) => ["PENDING", "PREPARING", "READY"].includes(o.status))))
+    fetchWithCache("/api/orders", () => api.get<Order[]>("/api/orders"))
+      .then(({ data, cachedAt, stale }) => {
+        setOrders(data.filter((o) => ["PENDING", "PREPARING", "READY"].includes(o.status)));
+        setCacheInfo({ cachedAt, stale });
+      })
       .catch(() => setOrders([]));
   }, []);
 
@@ -65,6 +69,9 @@ export function KitchenDisplay() {
 
   return (
     <div className="space-y-4">
+      {cacheInfo?.stale && (
+        <Badge tone="warning">Showing data from {formatRelativeTime(cacheInfo.cachedAt)} — offline</Badge>
+      )}
       <h1 className="font-display text-2xl font-semibold">Kitchen Display</h1>
 
       {activeOrders.length === 0 ? (

@@ -3,13 +3,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { ClipboardList, Download } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
+import { fetchWithCache } from "@/lib/offline/data-cache";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { usePermissions } from "@/components/permissions-provider";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatRelativeTime } from "@/lib/format";
 import { BillOrderModal } from "@/components/restaurant/bill-order-modal";
 import { RefundModal } from "@/components/shared/refund-modal";
 
@@ -48,13 +49,16 @@ export function OrdersBoard({ currency }: { currency: string }) {
   const toast = useToast();
   const { has } = usePermissions();
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
   const [filter, setFilter] = useState("active");
   const [modal, setModal] = useState<ModalState>(null);
 
   const load = useCallback(() => {
-    api
-      .get<Order[]>("/api/orders")
-      .then(setOrders)
+    fetchWithCache("/api/orders", () => api.get<Order[]>("/api/orders"))
+      .then(({ data, cachedAt, stale }) => {
+        setOrders(data);
+        setCacheInfo({ cachedAt, stale });
+      })
       .catch(() => setOrders([]));
   }, []);
 
@@ -96,6 +100,9 @@ export function OrdersBoard({ currency }: { currency: string }) {
 
   return (
     <div className="space-y-4">
+      {cacheInfo?.stale && (
+        <Badge tone="warning">Showing data from {formatRelativeTime(cacheInfo.cachedAt)} — offline</Badge>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold">Orders</h1>
         <div className="flex flex-wrap items-center gap-2">

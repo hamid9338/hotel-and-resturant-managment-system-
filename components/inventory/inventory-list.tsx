@@ -3,12 +3,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { Package, Search } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { fetchWithCache } from "@/lib/offline/data-cache";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRows } from "@/components/ui/skeleton";
+import { formatRelativeTime } from "@/lib/format";
 import { usePermissions } from "@/components/permissions-provider";
 import { InventoryItemModal } from "@/components/inventory/inventory-item-modal";
 
@@ -32,15 +34,17 @@ export function InventoryList() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<{ item: Item | null } | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
 
   const load = useCallback(() => {
-    api
-      .get<Item[]>("/api/inventory")
-      .then(setItems)
+    fetchWithCache("/api/inventory", () => api.get<Item[]>("/api/inventory"))
+      .then(({ data, cachedAt, stale }) => {
+        setItems(data);
+        if (stale) setCacheInfo({ cachedAt, stale });
+      })
       .catch(() => setItems([]));
-    api
-      .get<Supplier[]>("/api/suppliers")
-      .then(setSuppliers)
+    fetchWithCache("/api/suppliers", () => api.get<Supplier[]>("/api/suppliers"))
+      .then(({ data }) => setSuppliers(data))
       .catch(() => {});
   }, []);
 
@@ -56,6 +60,9 @@ export function InventoryList() {
 
   return (
     <div className="space-y-4">
+      {cacheInfo?.stale && (
+        <Badge tone="warning">Showing data from {formatRelativeTime(cacheInfo.cachedAt)} — offline</Badge>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold">Inventory</h1>
         <div className="flex items-center gap-2">

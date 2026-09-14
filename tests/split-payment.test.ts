@@ -12,7 +12,7 @@ describe.skipIf(!hasRealDb)("split-by-payment-method billing", () => {
 
       const suffix = Date.now();
       const user = await prisma.user.findFirstOrThrow();
-      const session = { id: user.id, name: user.name, username: user.username, roleId: user.roleId, roleName: "owner", shift: null };
+      const session = { id: user.id, name: user.name, username: user.username, roleId: user.roleId, roleName: "owner", shift: null, permissionKeys: [], authSource: "db" as const };
 
       const category = await prisma.menuCategory.create({ data: { name: `TestCat-${suffix}` } });
       const menuItem = await prisma.menuItem.create({

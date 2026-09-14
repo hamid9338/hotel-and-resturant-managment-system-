@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { requireSessionForPage } from "@/lib/auth/session";
-import { getRolePermissionKeys } from "@/lib/auth/permissions";
+import { getSessionPermissionKeys } from "@/lib/auth/permissions";
 import { getSettings } from "@/lib/services/settings";
 import { getUnreadAlertSummary } from "@/lib/services/alerts";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const session = await requireSessionForPage();
-  const permissionKeys = await getRolePermissionKeys(session.roleId);
+  const permissionKeys = await getSessionPermissionKeys(session);
   const settings = await getSettings();
   const alertSummary = permissionKeys.has("alerts.view")
     ? await getUnreadAlertSummary(session.id)

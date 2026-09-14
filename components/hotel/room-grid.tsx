@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { Search, BedDouble } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { fetchWithCache } from "@/lib/offline/data-cache";
+import { formatRelativeTime } from "@/lib/format";
 import { RoomCard } from "@/components/hotel/room-card";
 import { RoomDetailModal } from "@/components/hotel/room-detail-modal";
 import { NewReservationModal } from "@/components/hotel/new-reservation-modal";
@@ -10,6 +12,7 @@ import { CheckoutModal } from "@/components/hotel/checkout-modal";
 import { DiscountModal } from "@/components/hotel/discount-modal";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRows } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/field";
 import type { RoomWithBookings } from "@/lib/types/hotel";
 
@@ -24,14 +27,17 @@ const STATUS_FILTERS = ["ALL", "AVAILABLE", "OCCUPIED", "CLEANING", "MAINTENANCE
 
 export function RoomGrid({ currency }: { currency: string }) {
   const [rooms, setRooms] = useState<RoomWithBookings[] | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
 
   const load = useCallback(() => {
-    api
-      .get<RoomWithBookings[]>("/api/rooms")
-      .then(setRooms)
+    fetchWithCache("/api/rooms", () => api.get<RoomWithBookings[]>("/api/rooms"))
+      .then(({ data, cachedAt, stale }) => {
+        setRooms(data);
+        setCacheInfo({ cachedAt, stale });
+      })
       .catch(() => setRooms([]));
   }, []);
 
@@ -52,6 +58,9 @@ export function RoomGrid({ currency }: { currency: string }) {
 
   return (
     <div className="space-y-4">
+      {cacheInfo?.stale && (
+        <Badge tone="warning">Showing data from {formatRelativeTime(cacheInfo.cachedAt)} — offline</Badge>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold">Rooms</h1>
         <div className="relative">

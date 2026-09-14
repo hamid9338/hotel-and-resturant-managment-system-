@@ -11,6 +11,14 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
+// Fired on logout so a shared front-desk terminal never serves the next
+// staff member a page cached under the previous one's session/role.
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "CLEAR_PAGE_CACHE") {
+    event.waitUntil(caches.delete(CACHE_NAME));
+  }
+});
+
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches

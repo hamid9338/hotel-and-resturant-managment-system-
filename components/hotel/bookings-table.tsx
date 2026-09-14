@@ -3,13 +3,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { CalendarRange, Search, Download } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { fetchWithCache } from "@/lib/offline/data-cache";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/field";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatRelativeTime } from "@/lib/format";
 import { usePermissions } from "@/components/permissions-provider";
 import { RefundModal } from "@/components/shared/refund-modal";
 
@@ -38,15 +39,19 @@ const STATUS_FILTERS = ["ALL", "RESERVED", "CHECKED_IN", "CHECKED_OUT", "CANCELL
 export function BookingsTable({ currency }: { currency: string }) {
   const { has } = usePermissions();
   const [bookings, setBookings] = useState<BookingRow[] | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
   const [status, setStatus] = useState("ALL");
   const [search, setSearch] = useState("");
   const [refundingId, setRefundingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     const qs = status !== "ALL" ? `?status=${status}` : "";
-    api
-      .get<BookingRow[]>(`/api/bookings${qs}`)
-      .then(setBookings)
+    const path = `/api/bookings${qs}`;
+    fetchWithCache(path, () => api.get<BookingRow[]>(path))
+      .then(({ data, cachedAt, stale }) => {
+        setBookings(data);
+        setCacheInfo({ cachedAt, stale });
+      })
       .catch(() => setBookings([]));
   }, [status]);
 
@@ -58,8 +63,20 @@ export function BookingsTable({ currency }: { currency: string }) {
     (b) => b.guest.name.toLowerCase().includes(search.toLowerCase()) || b.room.number.includes(search)
   );
 
+  // Deliberately an early return (not a ternary branch inside the JSX below)
+  // — a ternary here that swaps the loading skeleton for the loaded table
+  // inside the same return statement leaves the DOM permanently stuck on
+  // the server-rendered skeleton in this Next.js version (confirmed via a
+  // clean-build, production-mode repro: identical logic, only moving this
+  // check into a same-return ternary reproduces it). Every other list page
+  // in this app already uses this early-return shape for the same reason.
+  if (bookings === null) return <SkeletonRows rows={6} />;
+
   return (
     <div className="space-y-4">
+      {cacheInfo?.stale && (
+        <Badge tone="warning">Showing data from {formatRelativeTime(cacheInfo.cachedAt)} — offline</Badge>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold">Reservations</h1>
         <div className="flex items-center gap-2">
@@ -95,9 +112,7 @@ export function BookingsTable({ currency }: { currency: string }) {
         ))}
       </div>
 
-      {bookings === null ? (
-        <SkeletonRows rows={6} />
-      ) : filtered.length === 0 ? (
+      {filtered.length === 0 ? (
         <EmptyState icon={CalendarRange} title="No reservations found" description="Try a different filter or search." />
       ) : (
         <Card>

@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/db";
+import { withDbFallback, DbUnreachableError } from "@/lib/db-errors";
 import type { SessionUser } from "@/lib/auth/session";
 
 export class ForbiddenError extends Error {
@@ -20,8 +21,24 @@ export const getRolePermissionKeys = cache(async (roleId: string): Promise<Set<s
   return new Set(rows.map((r) => r.permission.key));
 });
 
+/**
+ * The permission-checking counterpart to lib/auth/session.ts::getSession's
+ * offline fallback — a separate DB dependency (RolePermission, not User), so
+ * fixing session validation alone wasn't enough. Falls back to the
+ * permission keys already embedded in the session's JWT (see SessionUser)
+ * only when the database is genuinely unreachable, never on a real answer.
+ */
+export async function getSessionPermissionKeys(session: SessionUser): Promise<Set<string>> {
+  try {
+    return await withDbFallback(() => getRolePermissionKeys(session.roleId));
+  } catch (err) {
+    if (!(err instanceof DbUnreachableError)) throw err;
+    return new Set(session.permissionKeys);
+  }
+}
+
 export async function hasPermission(session: SessionUser, key: string): Promise<boolean> {
-  const keys = await getRolePermissionKeys(session.roleId);
+  const keys = await getSessionPermissionKeys(session);
   return keys.has(key);
 }
 

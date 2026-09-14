@@ -3,7 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { Sparkles, Wrench } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
+import { fetchWithCache } from "@/lib/offline/data-cache";
+import { formatRelativeTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { usePermissions } from "@/components/permissions-provider";
@@ -15,12 +18,15 @@ export function HousekeepingBoard() {
   const { has } = usePermissions();
   const toast = useToast();
   const [rooms, setRooms] = useState<RoomWithBookings[] | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
   const [reportingRoom, setReportingRoom] = useState<{ id: string; number: string } | null>(null);
 
   const load = useCallback(() => {
-    api
-      .get<RoomWithBookings[]>("/api/rooms")
-      .then(setRooms)
+    fetchWithCache("/api/rooms", () => api.get<RoomWithBookings[]>("/api/rooms"))
+      .then(({ data, cachedAt, stale }) => {
+        setRooms(data);
+        setCacheInfo({ cachedAt, stale });
+      })
       .catch(() => setRooms([]));
   }, []);
 
@@ -45,6 +51,9 @@ export function HousekeepingBoard() {
 
   return (
     <div className="space-y-6">
+      {cacheInfo?.stale && (
+        <Badge tone="warning">Showing data from {formatRelativeTime(cacheInfo.cachedAt)} — offline</Badge>
+      )}
       <h1 className="font-display text-2xl font-semibold">Housekeeping</h1>
 
       <section>

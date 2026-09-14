@@ -12,7 +12,7 @@ describe.skipIf(!hasRealDb)("cash shift reconciliation", () => {
       const { createBooking } = await import("@/lib/services/bookings");
 
       const user = await prisma.user.findFirstOrThrow();
-      const session = { id: user.id, name: user.name, username: user.username, roleId: user.roleId, roleName: "owner", shift: null };
+      const session = { id: user.id, name: user.name, username: user.username, roleId: user.roleId, roleName: "owner", shift: null, permissionKeys: [], authSource: "db" as const };
 
       // Never fight a real (or leftover) open shift — this would block actual
       // staff use of the register, unlike a stray throwaway row elsewhere.

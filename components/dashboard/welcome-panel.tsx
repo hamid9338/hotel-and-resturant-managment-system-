@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getRolePermissionKeys } from "@/lib/auth/permissions";
+import { getSessionPermissionKeys } from "@/lib/auth/permissions";
 import { NAV_ITEMS } from "@/lib/nav";
 import type { SessionUser } from "@/lib/auth/session";
 
@@ -8,7 +8,7 @@ import type { SessionUser } from "@/lib/auth/session";
 // something every role should see, but everyone still needs a working
 // landing page, not a locked-out one.
 export async function WelcomePanel({ session }: { session: SessionUser }) {
-  const permissionKeys = [...(await getRolePermissionKeys(session.roleId))];
+  const permissionKeys = [...(await getSessionPermissionKeys(session))];
   const quickLinks = NAV_ITEMS.filter(
     (item) => item.href !== "/" && (!item.permission || item.permission.some((p) => permissionKeys.includes(p)))
   );

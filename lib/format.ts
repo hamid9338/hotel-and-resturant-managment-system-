@@ -29,3 +29,14 @@ export function formatDateTime(date: string | Date): string {
 export function toDateInputValue(date: string | Date): string {
   return new Date(date).toISOString().slice(0, 10);
 }
+
+export function formatRelativeTime(date: string | Date): string {
+  const diffMs = Date.now() - new Date(date).getTime();
+  const diffMinutes = Math.round(diffMs / 60_000);
+  if (diffMinutes < 1) return "just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.round(diffHours / 24);
+  return `${diffDays}d ago`;
+}

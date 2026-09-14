@@ -1,11 +1,11 @@
 import { requireSession } from "@/lib/auth/session";
-import { getRolePermissionKeys } from "@/lib/auth/permissions";
+import { getSessionPermissionKeys } from "@/lib/auth/permissions";
 import { ok, handleRouteError } from "@/lib/api/respond";
 
 export async function GET() {
   try {
     const session = await requireSession();
-    const permissionKeys = await getRolePermissionKeys(session.roleId);
+    const permissionKeys = await getSessionPermissionKeys(session);
     return ok({
       user: {
         id: session.id,

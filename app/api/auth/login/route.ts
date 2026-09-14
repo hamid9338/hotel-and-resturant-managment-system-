@@ -51,11 +51,27 @@ export async function POST(request: NextRequest) {
       return fail("INVALID_CREDENTIALS", "Invalid username or PIN.", 401);
     }
 
-    await createSessionCookie(user.id);
     const permissionKeys = await getRolePermissionKeys(user.roleId);
+    await createSessionCookie(user.id, {
+      roleId: user.roleId,
+      roleName: user.role.name,
+      permissionKeys: [...permissionKeys],
+      name: user.name,
+      username: user.username,
+      shift: user.shift,
+    });
 
     await recordAudit({
-      session: { id: user.id, name: user.name, username: user.username, roleId: user.roleId, roleName: user.role.name, shift: user.shift },
+      session: {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        roleId: user.roleId,
+        roleName: user.role.name,
+        shift: user.shift,
+        permissionKeys: [...permissionKeys],
+        authSource: "db" as const,
+      },
       action: "Login successful",
       module: "System",
       ipAddress: ip,

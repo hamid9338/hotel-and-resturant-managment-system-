@@ -17,6 +17,8 @@ describe.skipIf(!hasRealDb)("roles admin service", () => {
       roleId: ownerUser.roleId,
       roleName: "owner",
       shift: null,
+      permissionKeys: [],
+      authSource: "db" as const,
     };
 
     await expect(updateRolePermissions(session, owner.id, { permissionKeys: [] })).rejects.toMatchObject({
@@ -43,6 +45,8 @@ describe.skipIf(!hasRealDb)("roles admin service", () => {
       roleId: ownerUser.roleId,
       roleName: "owner",
       shift: null,
+      permissionKeys: [],
+      authSource: "db" as const,
     };
     const waiterSession = {
       id: waiterUser.id,
@@ -51,6 +55,8 @@ describe.skipIf(!hasRealDb)("roles admin service", () => {
       roleId: role.id,
       roleName: "waiter",
       shift: null,
+      permissionKeys: [],
+      authSource: "db" as const,
     };
 
     const before = await prisma.rolePermission.findMany({ where: { roleId: role.id }, include: { permission: true } });
@@ -81,6 +87,8 @@ describe.skipIf(!hasRealDb)("roles admin service", () => {
       roleId: ownerUser.roleId,
       roleName: "owner",
       shift: null,
+      permissionKeys: [],
+      authSource: "db" as const,
     };
 
     const before = await prisma.rolePermission.count({ where: { roleId: role.id } });
