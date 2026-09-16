@@ -15,16 +15,16 @@ datasource db {
 // ============================================================
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  username  String   @unique
-  pinHash   String
-  roleId    String
-  role      Role     @relation(fields: [roleId], references: [id])
-  shift     String?  @default("Morning")
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String    @id @default(uuid())
+  name               String
+  username           String    @unique
+  pinHash            String
+  roleId             String
+  role               Role      @relation(fields: [roleId], references: [id])
+  shift              String?   @default("Morning")
+  active             Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
   lastAlertsViewedAt DateTime? // last time this user opened the notification bell/alerts page
 
   bookingsCreated    Booking[]         @relation("BookingCreatedBy")
@@ -48,6 +48,7 @@ model User {
   cashShiftsClosed           CashShift[]         @relation("CashShiftClosedBy")
   maintenanceTicketsReported MaintenanceTicket[] @relation("MaintenanceReportedBy")
   maintenanceTicketsAssigned MaintenanceTicket[] @relation("MaintenanceAssignedTo")
+  announcementsCreated       Announcement[]
 
   @@index([roleId])
 }
@@ -132,20 +133,21 @@ model Room {
 }
 
 model Guest {
-  id               String    @id @default(uuid())
-  name             String
-  cnic             String?   @unique
-  passportNo       String?
-  phone            String
-  email            String?
-  address          String?
-  city             String?
-  country          String?
-  emergencyContact String?
-  notes            String?
-  bookings         Booking[]
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                     String                  @id @default(uuid())
+  name                   String
+  cnic                   String?                 @unique
+  passportNo             String?
+  phone                  String
+  email                  String?
+  address                String?
+  city                   String?
+  country                String?
+  emergencyContact       String?
+  notes                  String?
+  bookings               Booking[]
+  announcementRecipients AnnouncementRecipient[]
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
 
   @@index([phone])
 }
@@ -446,18 +448,18 @@ model Alert {
 // ============================================================
 
 model SystemSetting {
-  id               Int      @id @default(1)
-  businessName     String   @default("Kashmir View Lodges Hotel & Management System")
-  currency         String   @default("PKR")
-  timezone         String   @default("Asia/Karachi")
-  taxRatePct       Decimal  @default(5) @db.Decimal(5, 2)
-  serviceChargePct Decimal  @default(0) @db.Decimal(5, 2)
-  invoicePrefix    String   @default("KVL")
-  invoiceNextSeq   Int      @default(1)
-  logoUrl          String?
+  id                 Int       @id @default(1)
+  businessName       String    @default("Kashmir View Lodges Hotel & Management System")
+  currency           String    @default("PKR")
+  timezone           String    @default("Asia/Karachi")
+  taxRatePct         Decimal   @default(5) @db.Decimal(5, 2)
+  serviceChargePct   Decimal   @default(0) @db.Decimal(5, 2)
+  invoicePrefix      String    @default("KVL")
+  invoiceNextSeq     Int       @default(1)
+  logoUrl            String?
   lastAnomalyCheckAt DateTime? // throttles lib/services/anomalies.ts — internal only, not in the Settings form
   lastAiNarrativeAt  DateTime? // separate cooldown for the AI report narrative — distinct window, distinct field
-  updatedAt        DateTime @updatedAt
+  updatedAt          DateTime  @updatedAt
 }
 
 // ============================================================
@@ -696,4 +698,43 @@ model MaintenanceTicket {
 
   @@index([roomId])
   @@index([status])
+}
+
+// ============================================================
+// WHATSAPP ANNOUNCEMENTS
+// ============================================================
+
+enum AnnouncementRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// One "send this template to this audience" action. The actual per-guest
+// sends happen after this row (and its PENDING recipients) is created — see
+// lib/services/announcements.ts — so the request that creates this returns
+// immediately instead of waiting on however long a few dozen WhatsApp API
+// calls take.
+model Announcement {
+  id           String                  @id @default(uuid())
+  templateName String // must match a template already approved in Meta Business Manager — see lib/services/whatsapp.ts
+  variables    Json                    @default("[]") // ordered {{1}}, {{2}}... values, same for every recipient
+  createdById  String
+  createdBy    User                    @relation(fields: [createdById], references: [id])
+  recipients   AnnouncementRecipient[]
+  createdAt    DateTime                @default(now())
+}
+
+model AnnouncementRecipient {
+  id             String                      @id @default(uuid())
+  announcementId String
+  announcement   Announcement                @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  guestId        String
+  guest          Guest                       @relation(fields: [guestId], references: [id])
+  phone          String // snapshot of Guest.phone at send time, in case it changes later
+  status         AnnouncementRecipientStatus @default(PENDING)
+  error          String?
+  sentAt         DateTime?
+
+  @@index([announcementId])
 }

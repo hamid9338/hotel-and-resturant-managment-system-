@@ -15,6 +15,7 @@ const MONEY_SENSITIVE_TESTS = [
   "tests/cash-shift-reconciliation.test.ts",
   "tests/split-payment.test.ts",
   "tests/recipe-deduction.test.ts",
+  "tests/order-add-items.test.ts",
 ];
 
 export default defineConfig({

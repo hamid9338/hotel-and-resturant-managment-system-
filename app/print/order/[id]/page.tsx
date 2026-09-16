@@ -4,13 +4,20 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { getSettings } from "@/lib/services/settings";
 import { round2, toNumber } from "@/lib/money";
-import { InvoiceLayout } from "@/components/print/invoice-layout";
+import { InvoiceLayout, parsePrintSize } from "@/components/print/invoice-layout";
 
 // See app/print/booking/[id]/page.tsx for why this is deliberately outside lib/nav.ts.
-export default async function PrintOrderPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PrintOrderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ size?: string }>;
+}) {
   const session = await requireSessionForPage();
   await requirePermission(session, "restaurant.view");
   const { id } = await params;
+  const size = parsePrintSize((await searchParams).size);
 
   const [order, settings] = await Promise.all([
     prisma.restaurantOrder.findUnique({
@@ -28,7 +35,7 @@ export default async function PrintOrderPage({ params }: { params: Promise<{ id:
       currency={settings.currency}
       invoiceNo={order.invoiceNo}
       invoiceDate={order.billedAt ?? order.createdAt}
-      title="Receipt"
+      title={order.status === "BILLED" ? "Receipt" : "Order Ticket"}
       billTo={order.table ? order.table.label : order.orderType.replace(/_/g, " ")}
       lines={order.items.map((line) => ({
         name: line.nameSnapshot,
@@ -39,6 +46,7 @@ export default async function PrintOrderPage({ params }: { params: Promise<{ id:
       taxAmount={toNumber(order.taxAmount)}
       discountAmount={toNumber(order.discountAmount)}
       total={toNumber(order.total)}
+      size={size}
     />
   );
 }

@@ -22,6 +22,8 @@ import {
   Landmark,
   ChefHat,
   Wrench,
+  BookOpen,
+  MessageCircle,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon; permission?: string[]; section: string };
@@ -31,6 +33,13 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/hotel", label: "Rooms", icon: BedDouble, section: "Hotel", permission: ["hotel.view", "hotel.view_cleaning"] },
   { href: "/hotel/bookings", label: "Reservations", icon: CalendarRange, section: "Hotel", permission: ["hotel.view"] },
   { href: "/hotel/guests", label: "Guests", icon: Users, section: "Hotel", permission: ["hotel.view"] },
+  {
+    href: "/announcements",
+    label: "Announcements",
+    icon: MessageCircle,
+    section: "Hotel",
+    permission: ["announcements.send"],
+  },
   {
     href: "/housekeeping",
     label: "Housekeeping",
@@ -54,6 +63,7 @@ export const NAV_ITEMS: NavItem[] = [
     section: "Restaurant",
     permission: ["restaurant.update_order_status"],
   },
+  { href: "/restaurant/menu", label: "Menu", icon: BookOpen, section: "Restaurant", permission: ["restaurant.manage_menu"] },
   { href: "/ocr", label: "Bill Scanner", icon: ScanLine, section: "AI", permission: ["ocr.view", "ocr.scan"] },
   { href: "/inventory", label: "Inventory", icon: Package, section: "Inventory", permission: ["inventory.view"] },
   { href: "/inventory/suppliers", label: "Suppliers", icon: Truck, section: "Inventory", permission: ["inventory.view"] },

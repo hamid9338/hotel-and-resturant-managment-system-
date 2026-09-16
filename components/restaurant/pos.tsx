@@ -105,14 +105,17 @@ export function Pos({ currency }: { currency: string }) {
       items: cart.map((l) => ({ menuItemId: l.menuItemId, qty: l.qty })),
     };
     try {
-      const { queued } = await submitOrQueue({
+      const { queued, result } = await submitOrQueue({
         operationKind: "orders.create",
         entityId: crypto.randomUUID(),
         userId,
         payload,
-        onlineCall: () => api.post("/api/orders", payload),
+        onlineCall: () => api.post<{ id: string }>("/api/orders", payload),
       });
       toast.success(queued ? "You're offline — this order will sync automatically once you're back online." : "Order placed");
+      // Only possible for the online path — a queued order has no server id
+      // to print yet, only a local outbox entry.
+      if (!queued && result) window.open(`/print/order/${result.id}`, "_blank");
       setCart([]);
       setTableId(null);
       api

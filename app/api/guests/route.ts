@@ -11,18 +11,25 @@ export async function GET(request: NextRequest) {
     const session = await requireSession();
     await requirePermission(session, "hotel.view");
     const q = request.nextUrl.searchParams.get("q")?.trim();
+    // "active" is used by the announcements audience picker to preview who a
+    // send will reach — uncapped, since staff need the real count, not a
+    // browsing-sized sample. The default (q-only) path is unchanged.
+    const audience = request.nextUrl.searchParams.get("audience");
     const guests = await prisma.guest.findMany({
-      where: q
-        ? {
-            OR: [
-              { name: { contains: q, mode: "insensitive" } },
-              { phone: { contains: q } },
-              { cnic: { contains: q } },
-            ],
-          }
-        : undefined,
+      where: {
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: "insensitive" } },
+                { phone: { contains: q } },
+                { cnic: { contains: q } },
+              ],
+            }
+          : {}),
+        ...(audience === "active" ? { bookings: { some: { status: { in: ["RESERVED", "CHECKED_IN"] } } } } : {}),
+      },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: audience ? undefined : 50,
     });
     return ok(guests);
   } catch (err) {

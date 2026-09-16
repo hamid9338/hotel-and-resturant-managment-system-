@@ -24,6 +24,10 @@ export const createOrderSchema = z
     path: ["roomId"],
   });
 
+export const addOrderItemsSchema = z.object({
+  items: z.array(orderItemSchema).min(1, { error: "Add at least one item." }),
+});
+
 export const updateOrderStatusSchema = z.object({
   status: z.enum(["PENDING", "PREPARING", "READY", "SERVED", "BILLED", "CANCELLED"]),
 });
@@ -41,8 +45,40 @@ export const billOrderSchema = z.object({
 });
 
 export const updateMenuItemSchema = z.object({
+  name: z.string().trim().min(2).optional(),
+  categoryId: z.string().min(1).optional(),
   price: z.number().min(0).optional(),
+  cost: z.number().min(0).optional(),
+  description: z.string().trim().optional(),
+  prepTimeMins: z.number().int().positive().optional(),
   available: z.boolean().optional(),
+});
+
+export const createMenuItemSchema = z.object({
+  name: z.string().trim().min(2, { error: "Name is required." }),
+  categoryId: z.string().min(1, { error: "A category is required." }),
+  price: z.number().positive(),
+  cost: z.number().min(0).optional(),
+  description: z.string().trim().optional(),
+  prepTimeMins: z.number().int().positive().optional(),
+  available: z.boolean().default(true),
+});
+
+export const createMenuCategorySchema = z.object({
+  name: z.string().trim().min(1, { error: "Name is required." }),
+  sortOrder: z.number().int().optional(),
+});
+
+export const recipeLineSchema = z.object({
+  inventoryItemId: z.string().min(1),
+  quantityUsed: z.number().positive(),
+});
+
+// Replace-the-whole-set, not per-line CRUD — matches how a chef/manager
+// naturally thinks about "here's this dish's full ingredient list." An empty
+// array is valid (a drink or item with nothing worth tracking).
+export const setRecipeSchema = z.object({
+  lines: z.array(recipeLineSchema),
 });
 
 export const updateKitchenItemStatusSchema = z.object({

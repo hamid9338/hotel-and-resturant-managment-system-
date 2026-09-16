@@ -50,7 +50,7 @@ export async function createBooking(
   const checkIn = new Date(input.checkIn);
   const checkOut = new Date(input.checkOut);
   const nights = nightsBetween(checkIn, checkOut);
-  const rate = toNumber(room.roomType.basePrice);
+  const rate = input.rate ?? toNumber(room.roomType.basePrice);
   const subtotal = round2(rate * nights);
 
   const settings = await getSettings();

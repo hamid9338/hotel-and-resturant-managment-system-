@@ -9,6 +9,7 @@ import { round2, toNumber } from "@/lib/money";
 import type { SessionUser } from "@/lib/auth/session";
 import type {
   createOrderSchema,
+  addOrderItemsSchema,
   updateOrderStatusSchema,
   billOrderSchema,
   updateKitchenItemStatusSchema,
@@ -16,6 +17,7 @@ import type {
 } from "@/lib/validation/restaurant";
 
 type CreateOrderInput = z.infer<typeof createOrderSchema>;
+type AddOrderItemsInput = z.infer<typeof addOrderItemsSchema>;
 type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
 type BillOrderInput = z.infer<typeof billOrderSchema>;
 type UpdateKitchenItemStatusInput = z.infer<typeof updateKitchenItemStatusSchema>;
@@ -105,6 +107,78 @@ export async function createOrder(
   });
 
   return order;
+}
+
+/**
+ * Adds items to an order that's already been placed — the "customer wants
+ * more food mid-meal" case, which previously had no path except a whole
+ * second order for the same table. Recipe stock is untouched here: billOrder
+ * re-reads order.items fresh at bill time, so anything added here gets
+ * deducted correctly then, for free — deduction stays a bill-time-only event.
+ */
+export async function addOrderItems(session: SessionUser, orderId: string, input: AddOrderItemsInput) {
+  const order = await prisma.restaurantOrder.findUnique({ where: { id: orderId }, include: orderInclude });
+  if (!order) throw new AppError("ORDER_NOT_FOUND", "Order not found.", 404);
+  if (order.status === "BILLED" || order.status === "CANCELLED") {
+    throw new AppError("INVALID_ORDER_STATE", "Cannot add items to a settled or cancelled order.", 409);
+  }
+
+  const menuItems = await prisma.menuItem.findMany({
+    where: { id: { in: input.items.map((i) => i.menuItemId) } },
+  });
+  const byId = new Map(menuItems.map((m) => [m.id, m]));
+
+  for (const line of input.items) {
+    const item = byId.get(line.menuItemId);
+    if (!item) throw new AppError("MENU_ITEM_NOT_FOUND", "One of the selected menu items no longer exists.", 404);
+    if (!item.available) throw new AppError("MENU_ITEM_UNAVAILABLE", `${item.name} is currently unavailable.`, 409);
+  }
+
+  // Recomputed over every line (existing + new), not just the added delta,
+  // so subtotal/tax/total can never drift from what's actually on the order.
+  const existingSubtotal = order.items.reduce((sum, line) => sum + toNumber(line.priceSnapshot) * line.qty, 0);
+  const addedSubtotal = input.items.reduce(
+    (sum, line) => sum + toNumber(byId.get(line.menuItemId)!.price) * line.qty,
+    0
+  );
+  const subtotal = round2(existingSubtotal + addedSubtotal);
+  const settings = await getSettings();
+  const taxAmount = round2((subtotal * toNumber(settings.taxRatePct)) / 100);
+  const total = round2(subtotal + taxAmount);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.orderItem.createMany({
+      data: input.items.map((line) => {
+        const item = byId.get(line.menuItemId)!;
+        return {
+          orderId: order.id,
+          menuItemId: item.id,
+          nameSnapshot: item.name,
+          priceSnapshot: item.price,
+          qty: line.qty,
+          notes: line.notes,
+          status: "QUEUED" as const,
+        };
+      }),
+    });
+
+    return tx.restaurantOrder.update({
+      where: { id: orderId },
+      data: { subtotal, taxAmount, total },
+      include: orderInclude,
+    });
+  });
+
+  await recordAudit({
+    session,
+    action: `Items added to order: ${order.table?.label ?? order.orderType} — +${input.items.length} item(s)`,
+    module: "Restaurant",
+    entityType: "RestaurantOrder",
+    entityId: order.id,
+    details: `New total ${total}`,
+  });
+
+  return updated;
 }
 
 export async function listOrders(filters: { status?: string; tableId?: string; date?: string }) {

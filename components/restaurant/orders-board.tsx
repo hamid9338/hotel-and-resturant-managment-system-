@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import { usePermissions } from "@/components/permissions-provider";
 import { formatCurrency, formatDateTime, formatRelativeTime } from "@/lib/format";
 import { BillOrderModal } from "@/components/restaurant/bill-order-modal";
+import { AddOrderItemsModal } from "@/components/restaurant/add-order-items-modal";
 import { RefundModal } from "@/components/shared/refund-modal";
 
 type OrderItemRow = { id: string; nameSnapshot: string; qty: number };
@@ -26,7 +27,11 @@ type Order = {
   createdBy: { name: string };
 };
 
-type ModalState = { type: "bill"; order: Order } | { type: "refund"; order: Order } | null;
+type ModalState =
+  | { type: "bill"; order: Order }
+  | { type: "refund"; order: Order }
+  | { type: "addItems"; order: Order }
+  | null;
 
 const NEXT_STATUS: Record<string, string | null> = {
   PENDING: "PREPARING",
@@ -157,6 +162,11 @@ export function OrdersBoard({ currency }: { currency: string }) {
                     → {NEXT_STATUS[order.status]}
                   </Button>
                 )}
+                {has("restaurant.create_order") && !["BILLED", "CANCELLED"].includes(order.status) && (
+                  <Button size="sm" variant="secondary" onClick={() => setModal({ type: "addItems", order })}>
+                    Add Items
+                  </Button>
+                )}
                 {has("restaurant.bill_order") && !["BILLED", "CANCELLED"].includes(order.status) && (
                   <Button size="sm" variant="primary" onClick={() => setModal({ type: "bill", order })}>
                     Bill
@@ -167,14 +177,14 @@ export function OrdersBoard({ currency }: { currency: string }) {
                     Cancel
                   </Button>
                 )}
-                {order.status === "BILLED" && (
+                {order.status !== "CANCELLED" && (
                   <a
                     href={`/print/order/${order.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center rounded-lg border border-border-default px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground"
                   >
-                    Print
+                    {order.status === "BILLED" ? "Print Receipt" : "Print Ticket"}
                   </a>
                 )}
                 {has("finance.refund") && order.status === "BILLED" && (
@@ -199,6 +209,14 @@ export function OrdersBoard({ currency }: { currency: string }) {
       )}
       {modal?.type === "refund" && (
         <RefundModal entityType="order" entityId={modal.order.id} onClose={() => setModal(null)} onDone={refreshAndClose} />
+      )}
+      {modal?.type === "addItems" && (
+        <AddOrderItemsModal
+          orderId={modal.order.id}
+          currency={currency}
+          onClose={() => setModal(null)}
+          onDone={refreshAndClose}
+        />
       )}
     </div>
   );

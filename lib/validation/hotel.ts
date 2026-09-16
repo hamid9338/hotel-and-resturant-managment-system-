@@ -16,6 +16,7 @@ export const createBookingSchema = z
     address: z.string().trim().optional(),
     checkIn: dateString,
     checkOut: dateString,
+    rate: z.number().positive().optional(),
     advancePaid: z.number().min(0).default(0),
     paymentMethod: paymentMethodEnum.default("CASH"),
     notes: z.string().trim().optional(),

@@ -4,13 +4,13 @@ import { AppError } from "@/lib/api/respond";
 import type { Prisma } from "@prisma/client";
 import { requirePermission, ForbiddenError } from "@/lib/auth/permissions";
 import { createBooking, checkInBooking, checkOutBooking } from "@/lib/services/bookings";
-import { createOrder, updateOrderStatus } from "@/lib/services/orders";
+import { createOrder, addOrderItems, updateOrderStatus } from "@/lib/services/orders";
 import { updateRoomStatus } from "@/lib/services/rooms";
 import { createPurchaseOrder } from "@/lib/services/purchase-orders";
 import { createExpense } from "@/lib/services/expenses";
 import { adjustStock } from "@/lib/services/inventory";
 import { createBookingSchema, checkoutSchema, roomStatusSchema } from "@/lib/validation/hotel";
-import { createOrderSchema, updateOrderStatusSchema } from "@/lib/validation/restaurant";
+import { createOrderSchema, addOrderItemsSchema, updateOrderStatusSchema } from "@/lib/validation/restaurant";
 import { createPurchaseOrderSchema } from "@/lib/validation/purchasing";
 import { createExpenseSchema } from "@/lib/validation/expenses";
 import { adjustStockSchema } from "@/lib/validation/inventory";
@@ -111,6 +111,18 @@ async function dispatch(session: SessionUser, op: SyncOperationInput): Promise<s
       await requirePermission(session, "restaurant.create_order");
       const input = createOrderSchema.parse(op.payload);
       const order = await createOrder(session, input, { id: op.entityId });
+      return order.id;
+    }
+    case "orders.addItems": {
+      await requirePermission(session, "restaurant.create_order");
+      // orderId travels inside the payload rather than as op.entityId — see
+      // the matching comment on inventory.adjustStock just below. op.entityId
+      // is this queued operation's own idempotency key; reusing the order's
+      // id there would make a second offline add-items call against the same
+      // order collide with the first's dedup record.
+      const { orderId, ...rest } = op.payload as { orderId: string } & Record<string, unknown>;
+      const input = addOrderItemsSchema.parse(rest);
+      const order = await addOrderItems(session, String(orderId), input);
       return order.id;
     }
     case "orders.updateStatus": {

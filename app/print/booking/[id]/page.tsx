@@ -4,16 +4,23 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
 import { getSettings } from "@/lib/services/settings";
 import { toNumber } from "@/lib/money";
-import { InvoiceLayout } from "@/components/print/invoice-layout";
+import { InvoiceLayout, parsePrintSize } from "@/components/print/invoice-layout";
 
 // Deliberately not in lib/nav.ts — reached only from a "Print" link on
 // already-permissioned pages (bookings-table.tsx, checkout-modal.tsx), not a
 // top-level destination. Still independently permission-checked here, since
 // nav-gating alone would not stop a direct URL visit.
-export default async function PrintBookingPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PrintBookingPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ size?: string }>;
+}) {
   const session = await requireSessionForPage();
   await requirePermission(session, "hotel.view");
   const { id } = await params;
+  const size = parsePrintSize((await searchParams).size);
 
   const [booking, settings] = await Promise.all([
     prisma.booking.findUnique({
@@ -45,6 +52,7 @@ export default async function PrintBookingPage({ params }: { params: Promise<{ i
       discountAmount={toNumber(booking.discountAmount)}
       total={toNumber(booking.total)}
       footnote={`Balance due: ${toNumber(booking.balanceDue)} ${settings.currency}`}
+      size={size}
     />
   );
 }

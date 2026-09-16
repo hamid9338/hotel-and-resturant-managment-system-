@@ -55,6 +55,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { key: "finance.manage_cash_shift", module: "finance", description: "Open and close a cash-register shift" },
   { key: "finance.refund", module: "finance", description: "Refund a settled bill or booking" },
   { key: "hotel.manage_maintenance", module: "hotel", description: "Assign and resolve maintenance tickets" },
+  { key: "announcements.send", module: "announcements", description: "Send a WhatsApp announcement to guests" },
 ];
 
 const ALL_KEYS = PERMISSIONS.map((p) => p.key);
@@ -97,6 +98,7 @@ export const ROLES: RoleDef[] = [
       "finance.manage_cash_shift",
       "finance.refund",
       "hotel.manage_maintenance",
+      "announcements.send",
     ],
   },
   {

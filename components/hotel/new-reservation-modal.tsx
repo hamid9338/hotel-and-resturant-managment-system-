@@ -38,6 +38,7 @@ export function NewReservationModal({
     address: "",
     checkIn: todayStr(),
     checkOut: tomorrowStr(),
+    rate: String(room.roomType.basePrice),
     advancePaid: "",
     paymentMethod: "CASH",
     notes: "",
@@ -49,7 +50,7 @@ export function NewReservationModal({
     1,
     Math.round((new Date(form.checkOut).getTime() - new Date(form.checkIn).getTime()) / 86_400_000)
   );
-  const estimate = nights * Number(room.roomType.basePrice);
+  const estimate = nights * (Number(form.rate) || 0);
 
   const submit = async () => {
     setError("");
@@ -62,6 +63,7 @@ export function NewReservationModal({
       address: form.address || undefined,
       checkIn: form.checkIn,
       checkOut: form.checkOut,
+      rate: Number(form.rate),
       advancePaid: form.advancePaid ? Number(form.advancePaid) : 0,
       paymentMethod: form.paymentMethod,
       notes: form.notes || undefined,
@@ -97,7 +99,12 @@ export function NewReservationModal({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit} loading={loading} disabled={!form.guestName || !form.phone}>
+          <Button
+            variant="primary"
+            onClick={submit}
+            loading={loading}
+            disabled={!form.guestName || !form.phone || !(Number(form.rate) > 0)}
+          >
             Create Reservation
           </Button>
         </>
@@ -131,6 +138,15 @@ export function NewReservationModal({
             value={form.checkOut}
             min={form.checkIn}
             onChange={(e) => setForm({ ...form, checkOut: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label required>Rate / Night</Label>
+          <Input
+            type="number"
+            min={0}
+            value={form.rate}
+            onChange={(e) => setForm({ ...form, rate: e.target.value })}
           />
         </div>
         <div>

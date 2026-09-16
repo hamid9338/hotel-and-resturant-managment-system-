@@ -8,6 +8,7 @@ export const syncOperationKindEnum = z.enum([
   "bookings.checkin",
   "bookings.checkout",
   "orders.create",
+  "orders.addItems",
   "orders.updateStatus",
   "rooms.updateStatus",
   "purchaseOrders.create",
