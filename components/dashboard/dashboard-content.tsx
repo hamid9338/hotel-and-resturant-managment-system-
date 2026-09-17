@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DollarSign, BedDouble, UtensilsCrossed, TrendingUp, AlertTriangle, Wallet, LogIn, LogOut } from "lucide-react";
+import { DollarSign, BedDouble, UtensilsCrossed, TrendingUp, AlertTriangle, Wallet, LogIn, LogOut, WifiOff } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { fetchWithCache } from "@/lib/offline/data-cache";
 import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { RoomStatusBreakdown } from "@/components/dashboard/room-status-breakdown";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatRelativeTime } from "@/lib/format";
 
 const PERIODS = [
   { key: "today", label: "Today" },
@@ -45,24 +46,36 @@ export function DashboardContent({ currency }: { currency: string }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [trend, setTrend] = useState<Trend[]>([]);
   const [loadError, setLoadError] = useState(false);
+  const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
 
   // Deliberately keeps showing the previous period's numbers while a new
   // period loads (rather than a `loading` flag flashing a skeleton on every
   // click) — only the very first load has no data yet to show.
+  //
+  // This is a heavy, fully recomputed aggregate (not a raw list), so a
+  // stale copy is a real risk: someone glancing at "Total Revenue" during an
+  // outage could easily mistake yesterday's number for right now. It's still
+  // cached via fetchWithCache — landing on a hard "check your connection"
+  // wall on the very first page you see is a worse outage experience than a
+  // clearly-marked stale number — but the staleness banner below is
+  // deliberately much louder than the small badge other list pages use.
   useEffect(() => {
     let active = true;
-    Promise.all([api.get<Summary>(`/api/reports/summary?period=${period}`), api.get<Trend[]>(`/api/reports/daily?days=7`)])
+    Promise.all([
+      fetchWithCache(`/api/reports/summary?period=${period}`, () => api.get<Summary>(`/api/reports/summary?period=${period}`)),
+      fetchWithCache(`/api/reports/daily?days=7`, () => api.get<Trend[]>(`/api/reports/daily?days=7`)),
+    ])
       .then(([s, t]) => {
         if (!active) return;
-        setSummary(s);
-        setTrend(t);
+        setSummary(s.data);
+        setTrend(t.data);
         setLoadError(false);
+        setCacheInfo(s.stale || t.stale ? { cachedAt: s.cachedAt, stale: true } : null);
       })
       .catch(() => {
-        // A failed fetch previously left this stuck on the loading skeleton
-        // forever — this is a poor caching candidate (a heavy, fully
-        // recomputed aggregate, not a raw list), so the fix is just failing
-        // visibly instead of hanging, not caching the numbers.
+        // Only reached when there's no cached copy at all (a first-ever
+        // offline visit) — fetchWithCache already falls back to the last
+        // cached numbers for every other case.
         if (active) setLoadError(true);
       });
     return () => {
@@ -101,6 +114,15 @@ export function DashboardContent({ currency }: { currency: string }) {
         </div>
       ) : (
         <>
+          {cacheInfo?.stale && (
+            <div className="flex items-center gap-3 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning">
+              <WifiOff size={18} className="shrink-0" />
+              <span>
+                <strong>Offline — showing numbers from {formatRelativeTime(cacheInfo.cachedAt)}.</strong> These may not
+                reflect activity since then. Reconnect and reload for current figures.
+              </span>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <StatCard label="Total Revenue" value={formatCurrency(summary.totalRevenue, currency)} icon={DollarSign} tone="accent" />
             <StatCard label="Hotel Revenue" value={formatCurrency(summary.hotelRevenue, currency)} icon={BedDouble} tone="info" />
