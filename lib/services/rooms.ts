@@ -13,6 +13,10 @@ const VALID_TRANSITIONS: Record<string, RoomStatus[]> = {
   // Housekeeping can also flag a room into maintenance (a broken AC, etc.);
   // only owner/manager can take it all the way to OUT_OF_SERVICE.
   housekeeper: ["AVAILABLE", "CLEANING", "MAINTENANCE"],
+  // Forwards a transition a human already validated locally (see
+  // lib/services/local-cloud-sync.ts) — should never be more restrictive
+  // than the original actor was, so it gets the full set like owner/manager.
+  sync_service: ["AVAILABLE", "OCCUPIED", "CLEANING", "MAINTENANCE", "OUT_OF_SERVICE"],
 };
 
 export async function updateRoomStatus(

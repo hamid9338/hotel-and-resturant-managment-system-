@@ -85,9 +85,11 @@ schema.
 
 - **No persistent local filesystem dependency.** All uploads go to Vercel Blob; the database is Postgres, not a
   file. Nothing in this app writes to the local filesystem at runtime.
-- **No long-running processes.** Every route is a stateless serverless function. The one exception is the offline
-  sync design, which is deliberately client-side (IndexedDB) rather than a server-side queue that would need a
-  persistent worker.
+- **No long-running processes on Vercel.** Every route is a stateless serverless function. The one exception is the
+  offline sync design, which is deliberately client-side (IndexedDB) rather than a server-side queue that would need
+  a persistent worker — **on this (cloud) deployment.** A separate, optional local deployment exists for sites with
+  unreliable internet, and *that* one does run persistent processes (its own web server, and a background sync
+  worker) — see [DEPLOYMENT-LOCAL.md](DEPLOYMENT-LOCAL.md). It doesn't change anything about this deployment.
 - **CORS:** not configured, and shouldn't need to be — the frontend and API are the same Next.js app on the same
   origin. If you later split them, you'll need to add CORS headers to the API routes.
 - **OCR upload size:** Vercel's server-upload path caps request bodies at ~4.5MB. The bill-scanner upload compresses

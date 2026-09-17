@@ -145,6 +145,12 @@ npm run db:studio   # Prisma Studio — browse/edit data directly
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for exact Vercel deployment steps, required environment variables, and
 storage/AI configuration.
 
+For a site with unreliable internet, see [DEPLOYMENT-LOCAL.md](./DEPLOYMENT-LOCAL.md) — an optional second
+deployment that runs on a machine at the site itself, so staff can keep working during an outage, syncing back
+to the cloud database once internet returns. This is a separate, standing deployment for a restaurant's own
+premises, not part of the "Getting started" steps above (which set up a normal developer environment against
+the cloud database).
+
 ## Troubleshooting
 
 - **`JWT_SECRET is not set` error on login:** add `JWT_SECRET` to `.env` (see step 2 above).

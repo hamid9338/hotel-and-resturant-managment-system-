@@ -486,9 +486,23 @@ model SyncOperation {
   conflictReason  String?
   serverAppliedAt DateTime?
   createdAt       DateTime   @default(now())
+  seq             Int        @default(autoincrement()) // same-millisecond ordering tiebreaker
+
+  // The four fields below are populated only on a LOCAL-SERVER deployment
+  // (see DEPLOYMENT-LOCAL.md) — scripts/cloud-sync-worker.ts forwards a
+  // locally-applied operation to the cloud's own SyncOperation table via
+  // POST /api/sync/push, then records the result back onto this same local
+  // row. On the cloud deployment these simply stay null forever, which is
+  // an acceptable cost for keeping one shared schema instead of forking it.
+  cloudPushStatus     SyncStatus?
+  cloudPushedAt       DateTime?
+  cloudConflictReason String?
+  cloudPushAttempts   Int         @default(0)
 
   @@index([userId])
   @@index([status])
+  @@index([deviceId])
+  @@index([status, cloudPushStatus, createdAt])
 }
 
 // ============================================================

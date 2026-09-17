@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth/permissions";
 import { checkoutSchema } from "@/lib/validation/hotel";
 import { checkOutBooking } from "@/lib/services/bookings";
 import { getUnbilledRoomServiceOrders } from "@/lib/services/orders";
+import { recordLocalMutation } from "@/lib/services/local-cloud-sync";
 import { ok, handleRouteError } from "@/lib/api/respond";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -12,6 +13,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const input = checkoutSchema.parse(await request.json());
     const { id } = await params;
     const booking = await checkOutBooking(session, id, input);
+    await recordLocalMutation(session, {
+      operationKind: "bookings.checkout",
+      entityId: booking.id,
+      payload: { bookingId: id, ...input },
+    });
     const unbilledRoomService = await getUnbilledRoomServiceOrders(id);
     return ok({ booking, unbilledRoomService });
   } catch (err) {

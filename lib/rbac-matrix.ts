@@ -158,4 +158,25 @@ export const ROLES: RoleDef[] = [
       "finance.log_expense",
     ],
   },
+  // Not a staff role — never logs in interactively (see
+  // scripts/create-service-account.ts). Used only by a local-server
+  // deployment's scripts/cloud-sync-worker.ts to forward its own
+  // already-validated operations to the cloud, so it needs exactly the
+  // permissions those 10 whitelisted operation kinds require (see
+  // lib/services/sync.ts's dispatch()) — no more.
+  {
+    name: "sync_service",
+    label: "Sync Service (automated)",
+    permissions: [
+      "hotel.create_booking",
+      "hotel.checkin",
+      "hotel.checkout",
+      "restaurant.create_order",
+      "restaurant.update_order_status",
+      "restaurant.cancel_order",
+      "inventory.manage",
+      "inventory.adjust_stock",
+      "finance.log_expense",
+    ],
+  },
 ];

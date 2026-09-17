@@ -20,6 +20,11 @@ type SyncOp = {
   conflictReason: string | null;
   createdAt: string;
   user: { name: string };
+  // Populated only for an operation applied on a local-server deployment and
+  // then forwarded to the cloud by scripts/cloud-sync-worker.ts — see
+  // DEPLOYMENT-LOCAL.md. Always null on the cloud deployment itself.
+  cloudPushStatus: string | null;
+  cloudConflictReason: string | null;
 };
 
 const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger"> = {
@@ -84,8 +89,16 @@ export function SyncQueueView() {
                     {op.user.name} · {formatDateTime(op.createdAt)}
                   </div>
                   {op.conflictReason && <div className="mt-0.5 text-xs text-danger">{op.conflictReason}</div>}
+                  {op.cloudConflictReason && (
+                    <div className="mt-0.5 text-xs text-danger">Cloud: {op.cloudConflictReason}</div>
+                  )}
                 </div>
-                <Badge tone={STATUS_TONE[op.status]}>{op.status}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge tone={STATUS_TONE[op.status]}>{op.status}</Badge>
+                  {op.cloudPushStatus && (
+                    <Badge tone={STATUS_TONE[op.cloudPushStatus]}>cloud: {op.cloudPushStatus}</Badge>
+                  )}
+                </div>
               </div>
             ))}
           </div>

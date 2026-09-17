@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/auth/permissions";
 import { adjustStockSchema } from "@/lib/validation/inventory";
 import { adjustStock } from "@/lib/services/inventory";
+import { recordLocalMutation } from "@/lib/services/local-cloud-sync";
 import { ok, handleRouteError } from "@/lib/api/respond";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -11,6 +12,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const input = adjustStockSchema.parse(await request.json());
     const { id } = await params;
     const item = await adjustStock(session, id, input);
+    await recordLocalMutation(session, {
+      operationKind: "inventory.adjustStock",
+      entityId: item.id,
+      payload: { inventoryItemId: id, ...input },
+    });
     return ok(item);
   } catch (err) {
     return handleRouteError(err);

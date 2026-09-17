@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/auth/permissions";
 import { createExpenseSchema } from "@/lib/validation/expenses";
 import { createExpense, listExpenses } from "@/lib/services/expenses";
+import { recordLocalMutation } from "@/lib/services/local-cloud-sync";
 import { ok, handleRouteError } from "@/lib/api/respond";
 import { toCsv, csvResponse } from "@/lib/csv";
 
@@ -12,6 +13,7 @@ export async function POST(request: NextRequest) {
     await requirePermission(session, "finance.log_expense");
     const input = createExpenseSchema.parse(await request.json());
     const expense = await createExpense(session, input);
+    await recordLocalMutation(session, { operationKind: "expenses.create", entityId: expense.id, payload: input });
     return ok(expense, 201);
   } catch (err) {
     return handleRouteError(err);

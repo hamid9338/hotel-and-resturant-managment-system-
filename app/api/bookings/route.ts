@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/auth/permissions";
 import { createBookingSchema } from "@/lib/validation/hotel";
 import { createBooking } from "@/lib/services/bookings";
+import { recordLocalMutation } from "@/lib/services/local-cloud-sync";
 import { prisma } from "@/lib/db";
 import { ok, fail, handleRouteError } from "@/lib/api/respond";
 import { toCsv, csvResponse } from "@/lib/csv";
@@ -14,6 +15,7 @@ export async function POST(request: NextRequest) {
     await requirePermission(session, "hotel.create_booking");
     const input = createBookingSchema.parse(await request.json());
     const booking = await createBooking(session, input);
+    await recordLocalMutation(session, { operationKind: "bookings.create", entityId: booking.id, payload: input });
     return ok(booking, 201);
   } catch (err) {
     return handleRouteError(err);

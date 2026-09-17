@@ -20,7 +20,12 @@ export async function createSessionCookie(userId: string, claims: SessionClaims)
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    // The local-server deployment (see DEPLOYMENT-LOCAL.md) serves plain HTTP
+    // over a bare LAN IP with no TLS cert — browsers silently refuse to store
+    // or resend a Secure cookie on a non-HTTPS origin, which would otherwise
+    // make login look like it works once and then immediately look logged-out
+    // on every next request.
+    secure: process.env.NODE_ENV === "production" && !process.env.LOCAL_LAN_DEPLOYMENT,
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_DURATION_SECONDS,

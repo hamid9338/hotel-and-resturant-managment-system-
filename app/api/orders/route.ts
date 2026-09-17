@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/auth/permissions";
 import { createOrderSchema } from "@/lib/validation/restaurant";
 import { createOrder, listOrders } from "@/lib/services/orders";
+import { recordLocalMutation } from "@/lib/services/local-cloud-sync";
 import { ok, handleRouteError } from "@/lib/api/respond";
 import { toCsv, csvResponse } from "@/lib/csv";
 
@@ -12,6 +13,7 @@ export async function POST(request: NextRequest) {
     await requirePermission(session, "restaurant.create_order");
     const input = createOrderSchema.parse(await request.json());
     const order = await createOrder(session, input);
+    await recordLocalMutation(session, { operationKind: "orders.create", entityId: order.id, payload: input });
     return ok(order, 201);
   } catch (err) {
     return handleRouteError(err);

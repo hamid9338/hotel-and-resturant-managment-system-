@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requirePermission } from "@/lib/auth/permissions";
 import { updateOrderStatusSchema } from "@/lib/validation/restaurant";
 import { updateOrderStatus } from "@/lib/services/orders";
+import { recordLocalMutation } from "@/lib/services/local-cloud-sync";
 import { ok, handleRouteError } from "@/lib/api/respond";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -19,6 +20,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const { id } = await params;
     const order = await updateOrderStatus(session, id, input);
+    await recordLocalMutation(session, {
+      operationKind: "orders.updateStatus",
+      entityId: order.id,
+      payload: { orderId: id, ...input },
+    });
     return ok(order);
   } catch (err) {
     return handleRouteError(err);

@@ -1,0 +1,25 @@
+# Local Postgres for the on-site "hybrid" deployment — see DEPLOYMENT-LOCAL.md.
+# Not used for day-to-day development against the cloud DB; only for a
+# restaurant's own local server, or to test that flow before deploying it.
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kvl
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:-changeme_local_only}
+      POSTGRES_DB: kvl_local
+    ports:
+      # Bound to localhost only — devices on the LAN talk to the Next.js app,
+      # never directly to Postgres.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - kvl_local_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kvl -d kvl_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  kvl_local_pgdata:
