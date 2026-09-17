@@ -8,7 +8,7 @@ import { Input, Select } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
-import { formatCurrency, formatRelativeTime } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatRelativeTime } from "@/lib/format";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { submitOrQueue } from "@/lib/offline/sync-client";
 import { useSessionUser } from "@/components/session-provider";
@@ -29,6 +29,45 @@ const ORDER_TYPES = [
   { key: "TAKEAWAY", label: "Takeaway" },
   { key: "ROOM_SERVICE", label: "Room Service" },
 ];
+
+/**
+ * A queued (offline) order has no server-assigned invoice number yet, so the
+ * normal /print/order/[id] receipt can't be used — there's nothing in the
+ * database to fetch. This builds a minimal ticket directly from what's
+ * already on-screen instead, so kitchen/staff still get a paper copy right
+ * away. Clearly marked as an offline copy since totals/tax aren't
+ * server-recomputed and it isn't the official receipt.
+ */
+function printOfflineTicket(opts: {
+  orderTypeLabel: string;
+  tableLabel: string | null;
+  cart: CartLine[];
+  subtotal: number;
+  currency: string;
+}) {
+  const win = window.open("", "_blank", "width=360,height=600");
+  if (!win) return;
+  const rows = opts.cart
+    .map((l) => `<tr><td>${l.qty}x ${l.name}</td><td style="text-align:right">${formatCurrency(l.price * l.qty, opts.currency)}</td></tr>`)
+    .join("");
+  win.document.write(`<!doctype html><html><head><title>Offline Order Ticket</title><style>
+    body { font-family: ui-monospace, monospace; font-size: 12px; width: 280px; margin: 8px; }
+    h1 { font-size: 13px; text-align: center; margin: 0 0 4px; }
+    .warn { text-align: center; font-weight: bold; border: 1px dashed #000; padding: 4px; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    .meta { margin-bottom: 8px; }
+    .total { border-top: 1px dashed #000; margin-top: 6px; padding-top: 6px; display: flex; justify-content: space-between; font-weight: bold; }
+  </style></head><body>
+    <h1>Order Ticket</h1>
+    <div class="warn">OFFLINE — PENDING SYNC<br/>Not yet in the system</div>
+    <div class="meta">${opts.orderTypeLabel}${opts.tableLabel ? ` — ${opts.tableLabel}` : ""}<br/>${formatDateTime(new Date().toISOString())}</div>
+    <table>${rows}</table>
+    <div class="total"><span>Subtotal</span><span>${formatCurrency(opts.subtotal, opts.currency)}</span></div>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  win.print();
+}
 
 export function Pos({ currency }: { currency: string }) {
   const toast = useToast();
@@ -98,11 +137,19 @@ export function Pos({ currency }: { currency: string }) {
 
   const placeOrder = async () => {
     setPlacing(true);
+    const tableLabel = tableId ? ((tables ?? []).find((t) => t.id === tableId)?.label ?? null) : null;
     const payload = {
       orderType,
       tableId: orderType === "DINE_IN" ? tableId : undefined,
       roomId: orderType === "ROOM_SERVICE" ? roomId : undefined,
       items: cart.map((l) => ({ menuItemId: l.menuItemId, qty: l.qty })),
+      // Display-only — ignored by createOrderSchema.parse() server-side (it
+      // strips unknown keys) — so a still-queued order can render something
+      // readable in Orders/Kitchen Display before it has synced. See
+      // lib/offline/outbox.ts's pending-operation merge in those components.
+      displayLabel: ORDER_TYPES.find((t) => t.key === orderType)?.label ?? orderType,
+      displayTable: tableLabel,
+      displayItems: cart.map((l) => ({ name: l.name, qty: l.qty })),
     };
     try {
       const { queued, result } = await submitOrQueue({
@@ -113,9 +160,19 @@ export function Pos({ currency }: { currency: string }) {
         onlineCall: () => api.post<{ id: string }>("/api/orders", payload),
       });
       toast.success(queued ? "You're offline — this order will sync automatically once you're back online." : "Order placed");
-      // Only possible for the online path — a queued order has no server id
-      // to print yet, only a local outbox entry.
-      if (!queued && result) window.open(`/print/order/${result.id}`, "_blank");
+      if (!queued && result) {
+        window.open(`/print/order/${result.id}`, "_blank");
+      } else if (queued) {
+        // No server id to print a real receipt for yet — print a ticket from
+        // what's already on-screen instead, so the kitchen still gets a copy.
+        printOfflineTicket({
+          orderTypeLabel: payload.displayLabel,
+          tableLabel,
+          cart,
+          subtotal,
+          currency,
+        });
+      }
       setCart([]);
       setTableId(null);
       api

@@ -67,6 +67,11 @@ export function NewReservationModal({
       advancePaid: form.advancePaid ? Number(form.advancePaid) : 0,
       paymentMethod: form.paymentMethod,
       notes: form.notes || undefined,
+      // Display-only — ignored by createBookingSchema.parse() server-side (it
+      // strips unknown keys) — so a still-queued reservation can show the
+      // room number in the Reservations list before it has synced. See
+      // lib/offline/outbox.ts's pending-operation merge in bookings-table.tsx.
+      displayRoomNumber: room.number,
     };
     try {
       const { queued } = await submitOrQueue({

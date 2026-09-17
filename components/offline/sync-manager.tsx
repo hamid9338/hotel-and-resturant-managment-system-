@@ -22,6 +22,9 @@ export function SyncManager({ userId }: { userId: string }) {
         if (result.conflicts > 0) {
           toast.error(`${result.conflicts} queued action(s) had conflicts — check Sync Status`);
         }
+        if (result.failed > 0) {
+          toast.error(`${result.failed} queued action(s) could not be applied — check Sync Status`);
+        }
       } finally {
         flushingRef.current = false;
       }

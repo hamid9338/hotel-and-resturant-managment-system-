@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { ClipboardList, Download } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
 import { fetchWithCache } from "@/lib/offline/data-cache";
+import { getPendingOperations, type QueuedOperation } from "@/lib/offline/outbox";
+import { useSessionUser } from "@/components/session-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -53,7 +55,9 @@ const STATUS_TONE: Record<string, "warning" | "info" | "accent" | "success" | "n
 export function OrdersBoard({ currency }: { currency: string }) {
   const toast = useToast();
   const { has } = usePermissions();
+  const { id: userId } = useSessionUser();
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [pendingOrders, setPendingOrders] = useState<QueuedOperation[]>([]);
   const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
   const [filter, setFilter] = useState("active");
   const [modal, setModal] = useState<ModalState>(null);
@@ -65,7 +69,13 @@ export function OrdersBoard({ currency }: { currency: string }) {
         setCacheInfo({ cachedAt, stale });
       })
       .catch(() => setOrders([]));
-  }, []);
+    // Not yet synced (still in this device's own local outbox), so it
+    // doesn't exist server-side yet — merged in separately below, clearly
+    // marked, rather than silently invisible until the next sync succeeds.
+    getPendingOperations(userId)
+      .then((ops) => setPendingOrders(ops.filter((op) => op.operationKind === "orders.create")))
+      .catch(() => setPendingOrders([]));
+  }, [userId]);
 
   useEffect(() => {
     load();
@@ -132,6 +142,32 @@ export function OrdersBoard({ currency }: { currency: string }) {
           </div>
         </div>
       </div>
+
+      {pendingOrders.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {pendingOrders.map((op) => {
+            const payload = op.payload as { displayLabel?: string; displayTable?: string | null; displayItems?: { name: string; qty: number }[] };
+            return (
+              <div key={op.id} className="rounded-xl border border-dashed border-warning/40 bg-warning-soft/30 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-medium">{payload.displayTable ?? payload.displayLabel ?? "Order"}</span>
+                  <Badge tone="warning">Pending Sync</Badge>
+                </div>
+                <ul className="mb-3 space-y-1 text-sm text-muted">
+                  {(payload.displayItems ?? []).map((i, idx) => (
+                    <li key={idx}>
+                      {i.qty}× {i.name}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted">
+                  Placed offline — will appear here properly and reach the kitchen once back online.
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {visible.length === 0 ? (
         <EmptyState icon={ClipboardList} title="No orders" description="Orders placed from the POS will show up here." />

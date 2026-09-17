@@ -66,7 +66,15 @@ export async function queueOperation(op: {
 export async function getPendingOperations(userId: string): Promise<QueuedOperation[]> {
   const db = await getDb();
   const all = (await db.getAll(STORE)) as QueuedOperation[];
-  return all.filter((op) => op.status === "pending" && op.userId === userId);
+  // IndexedDB's getAll() returns rows in primary-key order — since `id` is a
+  // random UUID (not sequential), that's NOT the order these were queued in.
+  // /api/sync/push processes a batch sequentially specifically to preserve
+  // per-device ordering (e.g. a booking must apply before a check-in that
+  // references it), so this sort is what actually makes that guarantee true
+  // instead of just documented.
+  return all
+    .filter((op) => op.status === "pending" && op.userId === userId)
+    .sort((a, b) => a.clientTimestamp.localeCompare(b.clientTimestamp));
 }
 
 export async function markSynced(ids: string[]) {

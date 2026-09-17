@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { ChefHat } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
 import { fetchWithCache } from "@/lib/offline/data-cache";
+import { getPendingOperations, type QueuedOperation } from "@/lib/offline/outbox";
+import { useSessionUser } from "@/components/session-provider";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRows } from "@/components/ui/skeleton";
@@ -32,7 +34,9 @@ const ITEM_STATUS_TONE: Record<string, "neutral" | "warning" | "info" | "success
 };
 
 export function KitchenDisplay() {
+  const { id: userId } = useSessionUser();
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [pendingOrders, setPendingOrders] = useState<QueuedOperation[]>([]);
   const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
 
   const load = useCallback(() => {
@@ -42,7 +46,14 @@ export function KitchenDisplay() {
         setCacheInfo({ cachedAt, stale });
       })
       .catch(() => setOrders([]));
-  }, []);
+    // See the matching comment in orders-board.tsx — a still-queued order
+    // isn't in the database yet, so the kitchen wouldn't otherwise see it at
+    // all until this device syncs (the printed offline ticket from
+    // components/restaurant/pos.tsx is the reliable copy in the meantime).
+    getPendingOperations(userId)
+      .then((ops) => setPendingOrders(ops.filter((op) => op.operationKind === "orders.create")))
+      .catch(() => setPendingOrders([]));
+  }, [userId]);
 
   useEffect(() => {
     load();
@@ -73,6 +84,29 @@ export function KitchenDisplay() {
         <Badge tone="warning">Showing data from {formatRelativeTime(cacheInfo.cachedAt)} — offline</Badge>
       )}
       <h1 className="font-display text-2xl font-semibold">Kitchen Display</h1>
+
+      {pendingOrders.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {pendingOrders.map((op) => {
+            const payload = op.payload as { displayLabel?: string; displayTable?: string | null; displayItems?: { name: string; qty: number }[] };
+            return (
+              <div key={op.id} className="rounded-xl border border-dashed border-warning/40 bg-warning-soft/30 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-medium">{payload.displayTable ?? payload.displayLabel ?? "Order"}</span>
+                  <Badge tone="warning">Pending Sync</Badge>
+                </div>
+                <ul className="space-y-1.5 text-sm">
+                  {(payload.displayItems ?? []).map((i, idx) => (
+                    <li key={idx}>
+                      {i.qty}× {i.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {activeOrders.length === 0 ? (
         <EmptyState icon={ChefHat} title="All caught up" description="No orders waiting on the kitchen." />

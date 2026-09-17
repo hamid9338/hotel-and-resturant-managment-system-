@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { CalendarRange, Search, Download } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { fetchWithCache } from "@/lib/offline/data-cache";
+import { getPendingOperations, type QueuedOperation } from "@/lib/offline/outbox";
+import { useSessionUser } from "@/components/session-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -38,7 +40,9 @@ const STATUS_FILTERS = ["ALL", "RESERVED", "CHECKED_IN", "CHECKED_OUT", "CANCELL
 
 export function BookingsTable({ currency }: { currency: string }) {
   const { has } = usePermissions();
+  const { id: userId } = useSessionUser();
   const [bookings, setBookings] = useState<BookingRow[] | null>(null);
+  const [pendingBookings, setPendingBookings] = useState<QueuedOperation[]>([]);
   const [cacheInfo, setCacheInfo] = useState<{ cachedAt: string; stale: boolean } | null>(null);
   const [status, setStatus] = useState("ALL");
   const [search, setSearch] = useState("");
@@ -53,10 +57,18 @@ export function BookingsTable({ currency }: { currency: string }) {
         setCacheInfo({ cachedAt, stale });
       })
       .catch(() => setBookings([]));
-  }, [status]);
+    // Not yet synced (still in this device's own local outbox), so it isn't
+    // in the database yet — merged in separately below rather than silently
+    // invisible until the next successful sync.
+    getPendingOperations(userId)
+      .then((ops) => setPendingBookings(ops.filter((op) => op.operationKind === "bookings.create")))
+      .catch(() => setPendingBookings([]));
+  }, [status, userId]);
 
   useEffect(() => {
     load();
+    const interval = setInterval(load, 15000);
+    return () => clearInterval(interval);
   }, [load]);
 
   const filtered = (bookings ?? []).filter(
@@ -111,6 +123,28 @@ export function BookingsTable({ currency }: { currency: string }) {
           </button>
         ))}
       </div>
+
+      {pendingBookings.length > 0 && (
+        <Card className="border-dashed border-warning/40 bg-warning-soft/30">
+          <div className="divide-y divide-border-default">
+            {pendingBookings.map((op) => {
+              const payload = op.payload as { guestName?: string; displayRoomNumber?: string; checkIn?: string; checkOut?: string };
+              return (
+                <div key={op.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                  <div>
+                    <div className="font-medium">{payload.guestName ?? "Reservation"}</div>
+                    <div className="text-xs text-muted">
+                      {payload.displayRoomNumber ? `Room ${payload.displayRoomNumber}` : "Room pending"}
+                      {payload.checkIn && payload.checkOut ? ` · ${payload.checkIn} → ${payload.checkOut}` : ""}
+                    </div>
+                  </div>
+                  <Badge tone="warning">Pending Sync</Badge>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {filtered.length === 0 ? (
         <EmptyState icon={CalendarRange} title="No reservations found" description="Try a different filter or search." />
